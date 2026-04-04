@@ -1,26 +1,69 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-shell: #eef3f8;
+  --color-sidebar: #112039;
+  --color-panel-soft: #f5f8fc;
+  --color-border-soft: rgba(148, 163, 184, 0.22);
+  --color-border-strong: rgba(100, 116, 139, 0.22);
+  --color-text: #142033;
+  --color-text-soft: #435269;
+  --color-text-muted: #6c7b90;
+  --color-foreground: #142033;
+  --color-background: #eef3f8;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+  --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 28%),
+    linear-gradient(180deg, #f5f8fc 0%, #eef3f8 100%);
+  color: var(--color-text);
+  font-family: var(--font-sans), sans-serif;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+button,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
