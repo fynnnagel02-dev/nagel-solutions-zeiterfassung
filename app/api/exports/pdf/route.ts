@@ -32,6 +32,22 @@ function monthLabel(dateFrom: string) {
   );
 }
 
+function readProjectRelation(
+  project:
+    | {
+        name: string | null;
+        code: string | null;
+      }
+    | {
+        name: string | null;
+        code: string | null;
+      }[]
+    | null
+    | undefined
+) {
+  return Array.isArray(project) ? project[0] ?? null : project ?? null;
+}
+
 export async function GET(request: NextRequest) {
   const runtime = await getAppRuntimeState();
   const payload = exportRequestSchema.parse({
@@ -239,9 +255,10 @@ export async function GET(request: NextRequest) {
 
     for (const entry of scopedEntries) {
       const key = entry.project_id ?? "unassigned";
+      const project = readProjectRelation(entry.projects);
       const current = grouped.get(key) ?? {
-        projectName: entry.projects?.name ?? "Ohne Projekt",
-        projectCode: entry.projects?.code ?? null,
+        projectName: project?.name ?? "Ohne Projekt",
+        projectCode: project?.code ?? null,
         workedMinutes: 0,
         entryCount: 0,
       };

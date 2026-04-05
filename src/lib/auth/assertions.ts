@@ -92,7 +92,7 @@ export async function assertCanAccessEmployee(targetEmployeeId: string) {
   }
 
   if (context.runtime.mode === "demo") {
-    const demoScopedEmployeeIds = new Set([
+    const demoScopedEmployeeIds = new Set<string>([
       DEMO_IDS.employees.teamLead,
       DEMO_IDS.employees.employee,
       DEMO_IDS.employees.fieldOne,

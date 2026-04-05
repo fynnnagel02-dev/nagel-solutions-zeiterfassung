@@ -22,6 +22,22 @@ function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function readProjectRelation(
+  project:
+    | {
+        name: string | null;
+        code: string | null;
+      }
+    | {
+        name: string | null;
+        code: string | null;
+      }[]
+    | null
+    | undefined
+) {
+  return Array.isArray(project) ? project[0] ?? null : project ?? null;
+}
+
 export async function getCompanyContext() {
   await assertEmployeeIsActive();
   const admin = createSupabaseAdminClient();
@@ -395,10 +411,11 @@ export async function getMonthlyProjectSummary(year: number, month: number, team
 
   for (const entry of scopedEntries) {
     const key = entry.project_id ?? "unassigned";
+    const project = readProjectRelation(entry.projects);
     const existing = projectMap.get(key) ?? {
       projectId: key,
-      projectName: entry.projects?.name ?? "Ohne Projekt",
-      projectCode: entry.projects?.code ?? null,
+      projectName: project?.name ?? "Ohne Projekt",
+      projectCode: project?.code ?? null,
       workedMinutes: 0,
       entryCount: 0,
     };
