@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getCurrentSessionContext } from "@/src/lib/auth/session-context";
+import { DEMO_IDS } from "@/src/lib/demo/session";
 import { isAdmin, isTeamLead } from "@/src/lib/security/roles";
 import {
   AuthenticationError,
@@ -55,6 +56,14 @@ export async function assertTeamLeadOrAdmin() {
     throw new AuthorizationError();
   }
 
+  if (context.runtime.mode === "demo") {
+    if (context.profile.role === "team_lead" && !context.employee?.teamId) {
+      throw new AuthorizationError("This demo account has no team scope assigned");
+    }
+
+    return context;
+  }
+
   if (context.profile.role === "team_lead") {
     const admin = createSupabaseAdminClient();
     const { data, error } = await admin
@@ -80,6 +89,21 @@ export async function assertCanAccessEmployee(targetEmployeeId: string) {
 
   if (isAdmin(context.profile.role) || context.employee?.id === targetEmployeeId) {
     return context;
+  }
+
+  if (context.runtime.mode === "demo") {
+    const demoScopedEmployeeIds = new Set([
+      DEMO_IDS.employees.teamLead,
+      DEMO_IDS.employees.employee,
+      DEMO_IDS.employees.fieldOne,
+      DEMO_IDS.employees.fieldTwo,
+    ]);
+
+    if (context.profile.role === "team_lead" && demoScopedEmployeeIds.has(targetEmployeeId)) {
+      return context;
+    }
+
+    throw new AuthorizationError();
   }
 
   const admin = createSupabaseAdminClient();

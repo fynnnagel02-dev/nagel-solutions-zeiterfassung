@@ -22,10 +22,12 @@ import {
   updateTeam,
   updateWorkSchedule,
 } from "@/app/actions/admin";
+import { useAppRuntime } from "@/src/components/app/AppRuntimeProvider";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Modal } from "@/src/components/shared/Modal";
 import { Panel } from "@/src/components/shared/Panel";
+import { getActionMessage } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 import { ALL_GERMAN_STATE_CODES, GERMAN_STATE_OPTIONS } from "@/src/lib/presentation/germany";
 import { minutesToInputValue, parseHoursAndMinutes } from "@/src/lib/presentation/format";
@@ -1130,6 +1132,7 @@ export function ExportTriggerForm({
   teams: TeamOption[];
 }) {
   const router = useRouter();
+  const runtime = useAppRuntime();
   const [form, setForm] = useState({
     dateFrom: new Date().toISOString().slice(0, 10),
     dateTo: new Date().toISOString().slice(0, 10),
@@ -1140,7 +1143,9 @@ export function ExportTriggerForm({
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  async function runExport(type: "monthly_timesheet" | "absence_report" | "team_overview") {
+  async function runExport(
+    type: "monthly_timesheet" | "absence_report" | "team_overview" | "project_time_report"
+  ) {
     setMessage(null);
     setSuccess(null);
 
@@ -1156,14 +1161,33 @@ export function ExportTriggerForm({
         employeeId: form.employeeId || null,
         teamId: form.teamId || null,
       };
-      const query = new URLSearchParams(
-        Object.entries(payload).reduce<Record<string, string>>((accumulator, [key, value]) => {
-          if (value) {
-            accumulator[key] = value;
-          }
-          return accumulator;
-        }, {})
-      );
+      if (runtime.isDemo) {
+        setSuccess(
+          getActionMessage(
+            {
+              simulated: true,
+              message:
+                type === "monthly_timesheet"
+                  ? "Demo-Modus: Monatsexport wurde simuliert vorbereitet."
+                  : type === "absence_report"
+                    ? "Demo-Modus: Abwesenheitsreport wurde simuliert vorbereitet."
+                    : type === "project_time_report"
+                      ? "Demo-Modus: Projektreport wurde simuliert vorbereitet."
+                    : "Demo-Modus: Teamübersicht wurde simuliert vorbereitet.",
+            },
+            "PDF-Export wurde gestartet."
+          )
+        );
+        return;
+      }
+
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(payload)) {
+        if (value) {
+          query.set(key, String(value));
+        }
+      }
+
       window.open(`/api/exports/pdf?${query.toString()}`, "_blank", "noopener,noreferrer");
       setSuccess("PDF-Export wurde gestartet.");
       window.setTimeout(() => router.refresh(), 800);
@@ -1208,6 +1232,9 @@ export function ExportTriggerForm({
         </Button>
         <Button type="button" variant="secondary" disabled={isPending} onClick={() => startTransition(async () => runExport("team_overview"))}>
           Teamübersicht
+        </Button>
+        <Button type="button" variant="secondary" disabled={isPending} onClick={() => startTransition(async () => runExport("project_time_report"))}>
+          Projektreport
         </Button>
       </div>
       <FormMessage message={message} />

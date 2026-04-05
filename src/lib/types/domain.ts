@@ -15,13 +15,18 @@ export type ApprovalStatus =
   | "rejected";
 
 export type TimeEntrySource = "live" | "manual" | "correction";
-export type BreakSource = "live" | "manual";
+export type BreakSource = "live" | "manual" | "auto_legal";
 export type ChangeRequestStatus = "pending" | "approved" | "rejected" | "withdrawn";
-export type LeaveType = "vacation" | "sick" | "other";
+export type LeaveType = "vacation" | "sick" | "medical" | "other";
 export type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type ApprovalDecision = "approved" | "rejected";
 export type DayPart = "full" | "morning" | "afternoon";
-export type ExportType = "monthly_timesheet" | "absence_report" | "team_overview";
+export type LeaveDurationMode = "full_day" | "partial_day";
+export type ExportType =
+  | "monthly_timesheet"
+  | "absence_report"
+  | "team_overview"
+  | "project_time_report";
 export type ExportStatus = "pending" | "completed" | "failed";
 
 export type SessionContext = {
@@ -39,6 +44,12 @@ export type SessionContext = {
     targetDailyMinutesOverride: number | null;
     targetWeeklyMinutesOverride: number | null;
   } | null;
+  runtime: {
+    mode: "real" | "demo";
+    basePath: string;
+    role: AppRole;
+    embed: boolean;
+  };
 };
 
 export type CompanyContextDto = {

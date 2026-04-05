@@ -2,18 +2,27 @@
   "name": "nagel-solutions-zeiterfassung",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <23",
+    "npm": ">=10 <12"
+  },
   "scripts": {
+    "predev": "node ./scripts/check-node-version.mjs",
     "dev": "next dev --webpack",
+    "prebuild": "node ./scripts/check-node-version.mjs",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "prelint": "node ./scripts/check-node-version.mjs",
+    "lint": "eslint",
+    "pretypecheck": "node ./scripts/check-node-version.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "next": "16.2.2",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "server-only": "^0.0.1",
     "zod": "^4.3.6"
   },
@@ -26,6 +35,6 @@
     "eslint-config-next": "16.2.2",
     "supabase": "^2.84.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "5.9.2"
   }
 }

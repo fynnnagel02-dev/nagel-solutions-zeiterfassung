@@ -6,21 +6,28 @@ import { useRouter } from "next/navigation";
 import { withdrawTimeEntryChangeRequest, createTimeEntryChangeRequest } from "@/app/actions/approvals";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
+import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 export function CorrectionRequestForm({
   timeEntryId,
+  projects,
+  currentProjectId,
 }: {
   timeEntryId: string;
+  projects: Array<{ id: string; name: string }>;
+  currentProjectId: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [startedAt, setStartedAt] = useState("");
   const [endedAt, setEndedAt] = useState("");
   const [breakMinutes, setBreakMinutes] = useState("");
+  const [projectId, setProjectId] = useState(currentProjectId ?? projects[0]?.id ?? "");
   const [comment, setComment] = useState("");
 
   return (
@@ -30,6 +37,11 @@ export function CorrectionRequestForm({
       </Button>
       {open ? (
         <div className="space-y-4 rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-[color:var(--color-panel-soft)] p-4">
+          {projects.length === 0 ? (
+            <FormMessage
+              message="Zurzeit ist kein aktives Projekt verfügbar. Bitte legen Sie zuerst ein Projekt an oder aktivieren Sie 'Intern / Allgemein'."
+            />
+          ) : null}
           <div className="grid gap-4 md:grid-cols-2">
             <input
               type="datetime-local"
@@ -52,6 +64,17 @@ export function CorrectionRequestForm({
             placeholder="Pause in Minuten"
             className="w-full rounded-2xl border border-[color:var(--color-border-strong)] bg-white px-4 py-3 text-sm"
           />
+          <select
+            value={projectId}
+            onChange={(event) => setProjectId(event.target.value)}
+            className="w-full rounded-2xl border border-[color:var(--color-border-strong)] bg-white px-4 py-3 text-sm"
+          >
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
           <textarea
             rows={3}
             placeholder="Begründung"
@@ -68,21 +91,26 @@ export function CorrectionRequestForm({
           />
           <Button
             type="button"
-            disabled={isPending}
+            disabled={isPending || projects.length === 0}
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
+                setSuccess(null);
                 try {
-                  await createTimeEntryChangeRequest({
+                  const result = await createTimeEntryChangeRequest({
                     timeEntryId,
                     reason,
                     proposedStartedAt: startedAt ? new Date(startedAt).toISOString() : null,
                     proposedEndedAt: endedAt ? new Date(endedAt).toISOString() : null,
                     proposedBreakMinutes: breakMinutes ? Number(breakMinutes) : null,
+                    proposedProjectId: projectId,
                     proposedComment: comment || null,
                   });
+                  setSuccess(getActionMessage(result, "Korrektur wurde eingereicht."));
                   setOpen(false);
-                  router.refresh();
+                  if (!isDemoActionResult(result)) {
+                    router.refresh();
+                  }
                 } catch (error) {
                   setMessage(toGermanErrorMessage(error));
                 }
@@ -92,6 +120,7 @@ export function CorrectionRequestForm({
             {isPending ? "Wird gesendet..." : "Korrektur absenden"}
           </Button>
           <FormMessage message={message} />
+          <FormMessage message={success} tone="success" />
         </div>
       ) : null}
     </div>
@@ -101,20 +130,34 @@ export function CorrectionRequestForm({
 export function WithdrawCorrectionButton({ requestId }: { requestId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [tone, setTone] = useState<"error" | "success">("success");
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      disabled={isPending}
-      onClick={() =>
-        startTransition(async () => {
-          await withdrawTimeEntryChangeRequest(requestId);
-          router.refresh();
-        })
-      }
-    >
-      {isPending ? "Wird zurückgezogen..." : "Zurückziehen"}
-    </Button>
+    <div className="space-y-2">
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={isPending}
+        onClick={() =>
+          startTransition(async () => {
+            try {
+              const result = await withdrawTimeEntryChangeRequest(requestId);
+              setTone("success");
+              setMessage(getActionMessage(result, "Korrekturanfrage wurde zurückgezogen."));
+              if (!isDemoActionResult(result)) {
+                router.refresh();
+              }
+            } catch (error) {
+              setTone("error");
+              setMessage(toGermanErrorMessage(error));
+            }
+          })
+        }
+      >
+        {isPending ? "Wird zurückgezogen..." : "Zurückziehen"}
+      </Button>
+      <FormMessage message={message} tone={tone} />
+    </div>
   );
 }

@@ -18,6 +18,49 @@ import {
   createLeaveRequestSchema,
   decideLeaveRequestSchema,
 } from "@/src/lib/validations/leave";
+import type { DayPart } from "@/src/lib/types/domain";
+
+function deriveLegacyDayParts(input: {
+  durationMode: "full_day" | "partial_day";
+  partialStartTime?: string | null;
+  partialEndTime?: string | null;
+}): { startDayPart: DayPart; endDayPart: DayPart } {
+  if (input.durationMode !== "partial_day") {
+    return { startDayPart: "full", endDayPart: "full" };
+  }
+
+  const referenceTime = input.partialStartTime ?? input.partialEndTime ?? "12:00";
+  const isMorning = referenceTime < "12:00";
+
+  return {
+    startDayPart: isMorning ? "morning" : "afternoon",
+    endDayPart: isMorning ? "morning" : "afternoon",
+  };
+}
+
+function shouldRetryWithLegacyLeaveSchema(message: string) {
+  return (
+    message.includes("duration_mode") ||
+    message.includes("partial_start_time") ||
+    message.includes("partial_end_time") ||
+    message.includes("invalid input value for enum public.leave_type")
+  );
+}
+
+function buildLegacyComment(input: {
+  leaveType: "vacation" | "sick" | "medical" | "other";
+  comment?: string | null;
+}) {
+  if (input.leaveType !== "medical") {
+    return input.comment ?? null;
+  }
+
+  if (input.comment?.trim()) {
+    return `[Arzt Besuch] ${input.comment.trim()}`;
+  }
+
+  return "Arzt Besuch";
+}
 
 async function getLeaveRequest(leaveRequestId: string) {
   const admin = createSupabaseAdminClient();
@@ -66,8 +109,8 @@ export async function createLeaveRequest(input: unknown) {
       targetEmployeeId,
       payload.startDate,
       payload.endDate,
-      payload.startDayPart,
-      payload.endDayPart
+      "full",
+      "full"
     );
 
     await assertLeaveFitsBalance(
@@ -78,23 +121,48 @@ export async function createLeaveRequest(input: unknown) {
     );
   }
 
-  const { data, error } = await admin
+  const legacyDayParts = deriveLegacyDayParts(payload);
+
+  let { data, error } = await admin
     .from("leave_requests")
     .insert({
       employee_id: targetEmployeeId,
       leave_type: payload.leaveType,
       start_date: payload.startDate,
       end_date: payload.endDate,
-      start_day_part: payload.startDayPart,
-      end_day_part: payload.endDayPart,
+      start_day_part: legacyDayParts.startDayPart,
+      end_day_part: legacyDayParts.endDayPart,
+      duration_mode: payload.durationMode,
+      partial_start_time: payload.partialStartTime ?? null,
+      partial_end_time: payload.partialEndTime ?? null,
       comment: payload.comment ?? null,
       status: "pending",
     })
     .select("*")
     .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (error && shouldRetryWithLegacyLeaveSchema(error.message)) {
+    const fallbackInsert = await admin
+      .from("leave_requests")
+      .insert({
+        employee_id: targetEmployeeId,
+        leave_type: payload.leaveType === "medical" ? "other" : payload.leaveType,
+        start_date: payload.startDate,
+        end_date: payload.endDate,
+        start_day_part: legacyDayParts.startDayPart,
+        end_day_part: legacyDayParts.endDayPart,
+        comment: buildLegacyComment(payload),
+        status: "pending",
+      })
+      .select("*")
+      .single();
+
+    data = fallbackInsert.data;
+    error = fallbackInsert.error;
+  }
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Unable to create leave request");
   }
 
   if (payload.leaveType === "vacation") {

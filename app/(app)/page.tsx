@@ -1,17 +1,5 @@
-import { redirect } from "next/navigation";
-
-import { requireAppSession } from "@/src/lib/auth/route-guards";
+import { AppRootScreen } from "@/src/screens/app/AppRootScreen";
 
 export default async function AppRootPage() {
-  const context = await requireAppSession();
-
-  if (context.profile.role === "admin") {
-    redirect("/verwaltung/uebersicht");
-  }
-
-  if (context.profile.role === "team_lead") {
-    redirect("/team/heute");
-  }
-
-  redirect("/heute");
+  return AppRootScreen();
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useAppRuntime } from "@/src/components/app/AppRuntimeProvider";
 import { getNavigationForRole } from "@/src/components/app/navigation";
 import { cn } from "@/src/lib/presentation/cn";
 import type { AppRole } from "@/src/lib/types/domain";
@@ -13,7 +14,13 @@ type SidebarNavProps = {
 
 export function SidebarNav({ role }: SidebarNavProps) {
   const pathname = usePathname();
-  const navigation = getNavigationForRole(role);
+  const runtime = useAppRuntime();
+  const navigation = getNavigationForRole(role, runtime);
+
+  function isActive(href: string, matchPrefix?: string) {
+    const target = (matchPrefix ?? href).split("?")[0];
+    return pathname === target || pathname.startsWith(target);
+  }
 
   return (
     <aside className="sticky top-6 hidden h-[calc(100vh-3rem)] w-[252px] shrink-0 overflow-hidden rounded-[2rem] border border-[color:var(--color-border-soft)] bg-[linear-gradient(180deg,#142544_0%,#162746_62%,#12213a_100%)] shadow-[0_18px_44px_rgba(15,23,42,0.12)] lg:flex">
@@ -30,7 +37,7 @@ export function SidebarNav({ role }: SidebarNavProps) {
         <nav className="mt-8 flex-1 space-y-6 overflow-y-auto pr-1">
           <div className="space-y-2">
             {navigation.primary.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.matchPrefix ?? item.href);
+              const active = isActive(item.href, item.matchPrefix);
               return (
                 <Link
                   key={item.href}
@@ -54,7 +61,7 @@ export function SidebarNav({ role }: SidebarNavProps) {
                 {section.title}
               </p>
               {section.items.map((item) => {
-                const active = pathname === item.href || pathname.startsWith(item.matchPrefix ?? item.href);
+                const active = isActive(item.href, item.matchPrefix);
                 return (
                   <Link
                     key={item.href}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useAppRuntime } from "@/src/components/app/AppRuntimeProvider";
 import { getNavigationForRole } from "@/src/components/app/navigation";
 import { cn } from "@/src/lib/presentation/cn";
 import type { AppRole } from "@/src/lib/types/domain";
@@ -13,12 +14,14 @@ type MobileNavProps = {
 
 export function MobileNav({ role }: MobileNavProps) {
   const pathname = usePathname();
-  const items = getNavigationForRole(role).primary.slice(0, 4);
+  const runtime = useAppRuntime();
+  const items = getNavigationForRole(role, runtime).primary.slice(0, 4);
 
   return (
     <nav className="fixed inset-x-0 bottom-4 z-30 mx-auto flex max-w-md gap-2 rounded-[2rem] border border-[color:var(--color-border-strong)] bg-[color:var(--color-sidebar)]/96 p-2 shadow-[0_18px_44px_rgba(15,23,42,0.24)] backdrop-blur lg:hidden">
       {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.matchPrefix ?? item.href);
+        const target = (item.matchPrefix ?? item.href).split("?")[0];
+        const active = pathname === target || pathname.startsWith(target);
 
         return (
           <Link

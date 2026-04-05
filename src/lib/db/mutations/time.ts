@@ -7,7 +7,12 @@ import {
   assertTeamLeadScopeForEmployee,
 } from "@/src/lib/auth/assertions";
 import { logTimeEntryAuditEvent } from "@/src/lib/audit/log";
-import { assertNoOpenBreak, createSyntheticManualBreak } from "@/src/lib/domain/time-calculations";
+import {
+  assertNoOpenBreak,
+  createSyntheticManualBreak,
+  findAutoLegalBreakWindow,
+  getAdditionalAutoLegalBreakMinutes,
+} from "@/src/lib/domain/time-calculations";
 import { ConflictError, NotFoundError } from "@/src/lib/security/errors";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin-client";
 import {
@@ -36,6 +41,20 @@ async function getTimeEntryWithBreaks(timeEntryId: string) {
   return data;
 }
 
+async function assertActiveProject(projectId: string) {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new ConflictError("Bitte ein aktives Projekt auswählen.");
+  }
+}
+
 function assertEditableEntry(entry: {
   locked_at: string | null;
   approval_status: string;
@@ -46,17 +65,87 @@ function assertEditableEntry(entry: {
   }
 }
 
+async function syncAutoLegalBreaks(timeEntryId: string) {
+  const admin = createSupabaseAdminClient();
+  const entry = await getTimeEntryWithBreaks(timeEntryId);
+
+  if (!entry.started_at || !entry.ended_at) {
+    return entry;
+  }
+
+  const nonAutoBreaks = (entry.time_entry_breaks ?? []).filter(
+    (currentBreak: { source?: string | null }) => currentBreak.source !== "auto_legal"
+  );
+  const additionalMinutes = getAdditionalAutoLegalBreakMinutes({
+    startedAt: entry.started_at,
+    endedAt: entry.ended_at,
+    breaks: nonAutoBreaks,
+  });
+
+  const { error: deleteError } = await admin
+    .from("time_entry_breaks")
+    .delete()
+    .eq("time_entry_id", timeEntryId)
+    .eq("source", "auto_legal");
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  if (additionalMinutes <= 0) {
+    return getTimeEntryWithBreaks(timeEntryId);
+  }
+
+  const autoBreakWindow = findAutoLegalBreakWindow({
+    startedAt: entry.started_at,
+    endedAt: entry.ended_at,
+    breakMinutes: additionalMinutes,
+    existingBreaks: nonAutoBreaks,
+  });
+
+  const { error: insertError } = await admin.from("time_entry_breaks").insert({
+    time_entry_id: timeEntryId,
+    started_at: autoBreakWindow.startedAt,
+    ended_at: autoBreakWindow.endedAt,
+    source: "auto_legal",
+  });
+
+  if (insertError) {
+    const fallbackInsert = await admin.from("time_entry_breaks").insert({
+      time_entry_id: timeEntryId,
+      started_at: autoBreakWindow.startedAt,
+      ended_at: autoBreakWindow.endedAt,
+      source: "manual",
+    });
+
+    if (fallbackInsert.error) {
+      throw new Error(insertError.message);
+    }
+  }
+
+  return getTimeEntryWithBreaks(timeEntryId);
+}
+
 export async function startWorkday(input: unknown) {
   const context = await assertEmployeeIsActive();
   const employee = assertHasEmployee(context);
   const payload = liveWorkdaySchema.parse(input);
   const admin = createSupabaseAdminClient();
+  await assertActiveProject(payload.projectId);
 
-  const { data, error } = await admin.rpc("start_workday", {
-    target_employee_id: employee.id,
-    target_entry_date: payload.entryDate,
-    target_started_at: payload.startedAt,
-  });
+  const { data, error } = await admin
+    .from("time_entries")
+    .insert({
+      employee_id: employee.id,
+      entry_date: payload.entryDate,
+      started_at: payload.startedAt,
+      source: "live",
+      status: "open",
+      approval_status: "not_submitted",
+      project_id: payload.projectId,
+    })
+    .select("*, time_entry_breaks(*)")
+    .single();
 
   if (error) {
     throw new ConflictError(error.message);
@@ -155,16 +244,18 @@ export async function endWorkday(input: unknown) {
     throw new ConflictError(error.message);
   }
 
+  const finalizedEntry = await syncAutoLegalBreaks(data.id);
+
   await logTimeEntryAuditEvent({
     timeEntryId: data.id,
     actorProfileId: context.profile.id,
     actorEmployeeId: employee.id,
     eventType: "time_entry.ended",
     oldValues: entry,
-    newValues: data,
+    newValues: finalizedEntry,
   });
 
-  return data;
+  return finalizedEntry;
 }
 
 async function recreateManualBreak(
@@ -216,6 +307,7 @@ export async function saveManualTimeEntry(input: unknown) {
   if (targetEmployeeId !== employee.id) {
     await assertAdmin();
   }
+  await assertActiveProject(payload.projectId);
 
   const admin = createSupabaseAdminClient();
   const { data: existing } = await admin
@@ -233,7 +325,7 @@ export async function saveManualTimeEntry(input: unknown) {
       startedAt: payload.startedAt,
       endedAt: payload.endedAt,
       breakMinutes: payload.breakMinutes,
-      projectId: payload.projectId ?? null,
+      projectId: payload.projectId,
       comment: payload.comment ?? null,
     });
   }
@@ -248,7 +340,7 @@ export async function saveManualTimeEntry(input: unknown) {
       source: "manual",
       status: "complete",
       approval_status: "not_submitted",
-      project_id: payload.projectId ?? null,
+      project_id: payload.projectId,
       comment: payload.comment ?? null,
     })
     .select("*, time_entry_breaks(*)")
@@ -274,6 +366,9 @@ export async function updateEditableTimeEntry(input: unknown) {
   }
 
   assertEditableEntry(existing);
+  if (payload.projectId) {
+    await assertActiveProject(payload.projectId);
+  }
   const admin = createSupabaseAdminClient();
 
   const { data, error } = await admin
@@ -327,6 +422,12 @@ export async function submitTimeEntryForApproval(input: unknown) {
   if (!entry.ended_at) {
     throw new ConflictError("Only completed entries can be submitted");
   }
+
+  if (!entry.project_id) {
+    throw new ConflictError("Bitte ordnen Sie dem Eintrag vor der Freigabe ein Projekt zu.");
+  }
+
+  await syncAutoLegalBreaks(payload.timeEntryId);
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -390,6 +491,7 @@ export async function approveTimeEntry(timeEntryId: string, reason?: string) {
   const employee = assertHasEmployee(context);
   const entry = await getTimeEntryWithBreaks(timeEntryId);
   await assertTeamLeadScopeForEmployee(entry.employee_id);
+  await syncAutoLegalBreaks(timeEntryId);
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin.rpc("approve_time_entry", {

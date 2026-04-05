@@ -63,7 +63,7 @@ export async function getMyTodayTimeEntry() {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("time_entries")
-    .select("*, time_entry_breaks(*)")
+    .select("*, time_entry_breaks(*), projects(name, code)")
     .eq("employee_id", employee.id)
     .eq("entry_date", today)
     .maybeSingle();
@@ -99,7 +99,7 @@ export async function getMyWeekOverview() {
 
   const { data, error } = await admin
     .from("time_entries")
-    .select("*, time_entry_breaks(*)")
+    .select("*, time_entry_breaks(*), projects(name, code)")
     .eq("employee_id", employee.id)
     .gte("entry_date", toDateKey(weekStart))
     .lte("entry_date", toDateKey(weekEnd))
@@ -164,7 +164,7 @@ export async function getTeamTodayOverview() {
   const employeeIds = employees.map((row) => row.id);
   const { data: entries, error: entryError } = await admin
     .from("time_entries")
-    .select("*, time_entry_breaks(*)")
+    .select("*, time_entry_breaks(*), projects(name, code)")
     .in("employee_id", employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"])
     .eq("entry_date", today);
 
@@ -227,11 +227,15 @@ export async function getPendingApprovalsForMyScope() {
 
   const [{ data: timeEntries, error: timeError }, { data: leaveRequests, error: leaveError }, { data: changeRequests, error: changeError }] =
     await Promise.all([
-      admin.from("time_entries").select("*").in("employee_id", matchIds).eq("approval_status", "pending"),
+      admin
+        .from("time_entries")
+        .select("*, time_entry_breaks(*), projects(name, code)")
+        .in("employee_id", matchIds)
+        .eq("approval_status", "pending"),
       admin.from("leave_requests").select("*").in("employee_id", matchIds).eq("status", "pending"),
       admin
         .from("time_entry_change_requests")
-        .select("*, time_entries!inner(employee_id, entry_date, started_at, ended_at, project_id, comment)")
+        .select("*, time_entries!inner(employee_id, entry_date, started_at, ended_at, project_id, comment, projects(name, code))")
         .eq("status", "pending"),
     ]);
 
@@ -263,7 +267,7 @@ export async function getMonthlyEmployeeSummary(employeeId: string, year: number
   const [{ data: entries, error: timeError }, { data: leaveRequests, error: leaveError }] = await Promise.all([
     admin
       .from("time_entries")
-      .select("*, time_entry_breaks(*)")
+      .select("*, time_entry_breaks(*), projects(name, code), employees!time_entries_employee_id_fkey(team_id)")
       .eq("employee_id", employeeId)
       .gte("entry_date", dateFrom)
       .lte("entry_date", dateTo),
@@ -333,5 +337,88 @@ export async function getAdminDashboardSummary() {
     pendingTimeEntries: pendingTimeEntries ?? 0,
     pendingLeaveRequests: pendingLeaveRequests ?? 0,
     todayEntries: todayEntries ?? 0,
+  };
+}
+
+export async function getMonthlyProjectSummary(year: number, month: number, teamId?: string | null) {
+  const context = await assertTeamLeadOrAdmin();
+  const admin = createSupabaseAdminClient();
+  const dateFrom = `${year}-${String(month).padStart(2, "0")}-01`;
+  const dateTo = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+
+  const { data: entries, error } = await admin
+    .from("time_entries")
+    .select("id, employee_id, entry_date, started_at, ended_at, project_id, time_entry_breaks(*), projects(name, code)")
+    .gte("entry_date", dateFrom)
+    .lte("entry_date", dateTo);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const employeeIds = Array.from(new Set(entries.map((entry) => entry.employee_id)));
+  const { data: employees, error: employeeError } = await admin
+    .from("employees")
+    .select("id, team_id")
+    .in("id", employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"]);
+
+  if (employeeError) {
+    throw new Error(employeeError.message);
+  }
+
+  const teamIdByEmployeeId = new Map(employees.map((employee) => [employee.id, employee.team_id]));
+
+  const scopedEntries = entries.filter((entry) => {
+    const entryTeamId = teamIdByEmployeeId.get(entry.employee_id) ?? null;
+
+    if (context.profile.role !== "admin") {
+      return entryTeamId === context.employee?.teamId;
+    }
+
+    if (teamId) {
+      return entryTeamId === teamId;
+    }
+
+    return true;
+  });
+
+  const projectMap = new Map<
+    string,
+    {
+      projectId: string;
+      projectName: string;
+      projectCode: string | null;
+      workedMinutes: number;
+      entryCount: number;
+    }
+  >();
+
+  for (const entry of scopedEntries) {
+    const key = entry.project_id ?? "unassigned";
+    const existing = projectMap.get(key) ?? {
+      projectId: key,
+      projectName: entry.projects?.name ?? "Ohne Projekt",
+      projectCode: entry.projects?.code ?? null,
+      workedMinutes: 0,
+      entryCount: 0,
+    };
+
+    existing.workedMinutes += computeWorkedMinutes(entry, entry.time_entry_breaks ?? []);
+    existing.entryCount += 1;
+    projectMap.set(key, existing);
+  }
+
+  const projects = Array.from(projectMap.values()).sort(
+    (left, right) => right.workedMinutes - left.workedMinutes
+  );
+  const totalWorkedMinutes = projects.reduce((sum, project) => sum + project.workedMinutes, 0);
+
+  return {
+    totalWorkedMinutes,
+    projects: projects.map((project) => ({
+      ...project,
+      sharePercent:
+        totalWorkedMinutes > 0 ? Number(((project.workedMinutes / totalWorkedMinutes) * 100).toFixed(1)) : 0,
+    })),
   };
 }

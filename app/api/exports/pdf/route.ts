@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getAppRuntimeState } from "@/src/lib/demo/runtime";
 import { assertEmployeeIsActive, assertHasEmployee } from "@/src/lib/auth/assertions";
+import { simulateExportAction } from "@/src/lib/demo/simulations";
 import { computeBreakMinutes, computeWorkedMinutes } from "@/src/lib/domain/time-calculations";
 import { createTabularPdf } from "@/src/lib/exports/pdf";
+import { getLeaveTypeLabel } from "@/src/lib/presentation/leave";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin-client";
 import { exportRequestSchema } from "@/src/lib/validations/exports";
 
@@ -30,19 +33,25 @@ function monthLabel(dateFrom: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await assertEmployeeIsActive();
-  const actor = assertHasEmployee(context);
-  if (context.profile.role !== "admin") {
-    return NextResponse.json({ error: "Adminzugriff erforderlich." }, { status: 403 });
-  }
-
+  const runtime = await getAppRuntimeState();
   const payload = exportRequestSchema.parse({
     exportType: request.nextUrl.searchParams.get("exportType"),
     dateFrom: request.nextUrl.searchParams.get("dateFrom"),
     dateTo: request.nextUrl.searchParams.get("dateTo"),
     employeeId: request.nextUrl.searchParams.get("employeeId") || null,
     teamId: request.nextUrl.searchParams.get("teamId") || null,
+    projectId: request.nextUrl.searchParams.get("projectId") || null,
   });
+
+  if (runtime.isDemo) {
+    return NextResponse.json(simulateExportAction(payload));
+  }
+
+  const context = await assertEmployeeIsActive();
+  const actor = assertHasEmployee(context);
+  if (context.profile.role !== "admin") {
+    return NextResponse.json({ error: "Adminzugriff erforderlich." }, { status: 403 });
+  }
 
   const admin = createSupabaseAdminClient();
 
@@ -69,7 +78,7 @@ export async function GET(request: NextRequest) {
       await Promise.all([
         admin
           .from("time_entries")
-          .select("*, time_entry_breaks(*)")
+          .select("*, time_entry_breaks(*), projects(name, code)")
           .eq("employee_id", payload.employeeId)
           .gte("entry_date", payload.dateFrom)
           .lte("entry_date", payload.dateTo)
@@ -110,6 +119,15 @@ export async function GET(request: NextRequest) {
         return { date: dateKey, label: "Krank", note: leave.comment ?? "Krankmeldung", tone: [0.93, 0.35, 0.45] as [number, number, number] };
       }
 
+      if (leave?.leave_type === "medical") {
+        return {
+          date: dateKey,
+          label: "Arzt Besuch",
+          note: leave.comment ?? "Medizinischer Termin",
+          tone: [0.05, 0.65, 0.78] as [number, number, number],
+        };
+      }
+
       if (leave) {
         return {
           date: dateKey,
@@ -134,7 +152,7 @@ export async function GET(request: NextRequest) {
           date: dateKey,
           label: "Arbeitszeit",
           hours: `${(worked / 60).toFixed(2).replace(".", ",")} Std.`,
-          note: `${entry.started_at ? new Date(entry.started_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"} - ${entry.ended_at ? new Date(entry.ended_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"} · Pause ${(breakMinutes / 60).toFixed(2).replace(".", ",")} Std.`,
+          note: `${entry.started_at ? new Date(entry.started_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"} - ${entry.ended_at ? new Date(entry.ended_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "--:--"} · Pause ${(breakMinutes / 60).toFixed(2).replace(".", ",")} Std.${entry.projects?.name ? ` · Projekt ${entry.projects.name}` : ""}`,
           tone: [0.22, 0.67, 0.42] as [number, number, number],
         };
       }
@@ -157,19 +175,16 @@ export async function GET(request: NextRequest) {
     scopeLabel = payload.teamId ? "Teamreport" : "Gesamtübersicht";
     rows = requests.map((request) => ({
       date: `${request.start_date} - ${request.end_date}`,
-      label:
-        request.leave_type === "sick"
-          ? "Krank"
-          : request.leave_type === "vacation"
-            ? "Urlaub"
-            : "Abwesenheit",
+      label: getLeaveTypeLabel(request.leave_type),
       note: `${request.employees?.first_name ?? ""} ${request.employees?.last_name ?? ""}`.trim() || request.comment || "Ohne Zusatzinfo",
       tone:
         request.leave_type === "sick"
           ? ([0.93, 0.35, 0.45] as [number, number, number])
+          : request.leave_type === "medical"
+            ? ([0.05, 0.65, 0.78] as [number, number, number])
           : ([0.22, 0.55, 0.88] as [number, number, number]),
     }));
-  } else {
+  } else if (payload.exportType === "team_overview") {
     const { data: employees, error } = await admin.from("employees").select("first_name, last_name, is_active").order("last_name");
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -182,6 +197,70 @@ export async function GET(request: NextRequest) {
       note: `${employee.first_name} ${employee.last_name}`,
       tone: employee.is_active ? ([0.22, 0.67, 0.42] as [number, number, number]) : ([0.78, 0.82, 0.88] as [number, number, number]),
     }));
+  } else {
+    const { data: entries, error } = await admin
+      .from("time_entries")
+      .select("entry_date, employee_id, project_id, started_at, ended_at, time_entry_breaks(*), projects(name, code)")
+      .gte("entry_date", payload.dateFrom)
+      .lte("entry_date", payload.dateTo)
+      .order("entry_date");
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const employeeIds = Array.from(new Set(entries.map((entry) => entry.employee_id)));
+    const { data: employees, error: employeesError } = await admin
+      .from("employees")
+      .select("id, team_id")
+      .in("id", employeeIds.length > 0 ? employeeIds : ["00000000-0000-0000-0000-000000000000"]);
+
+    if (employeesError) {
+      return NextResponse.json({ error: employeesError.message }, { status: 500 });
+    }
+
+    const teamIdByEmployeeId = new Map(employees.map((employee) => [employee.id, employee.team_id]));
+
+    const scopedEntries = entries.filter((entry) => {
+      if (payload.teamId && teamIdByEmployeeId.get(entry.employee_id) !== payload.teamId) {
+        return false;
+      }
+
+      if (payload.projectId && entry.project_id !== payload.projectId) {
+        return false;
+      }
+
+      return true;
+    });
+    const grouped = new Map<
+      string,
+      { projectName: string; projectCode: string | null; workedMinutes: number; entryCount: number }
+    >();
+
+    for (const entry of scopedEntries) {
+      const key = entry.project_id ?? "unassigned";
+      const current = grouped.get(key) ?? {
+        projectName: entry.projects?.name ?? "Ohne Projekt",
+        projectCode: entry.projects?.code ?? null,
+        workedMinutes: 0,
+        entryCount: 0,
+      };
+      current.workedMinutes += computeWorkedMinutes(entry, entry.time_entry_breaks ?? []);
+      current.entryCount += 1;
+      grouped.set(key, current);
+    }
+
+    title = "Projektreport";
+    scopeLabel = payload.teamId ? "Teambezogene Projektstunden" : "Alle Projektstunden";
+    rows = Array.from(grouped.values())
+      .sort((left, right) => right.workedMinutes - left.workedMinutes)
+      .map((project) => ({
+        date: `${payload.dateFrom} - ${payload.dateTo}`,
+        label: project.projectName,
+        hours: `${(project.workedMinutes / 60).toFixed(2).replace(".", ",")} Std.`,
+        note: `${project.projectCode ?? "Ohne Code"} · ${project.entryCount} Einträge`,
+        tone: [0.22, 0.55, 0.88] as [number, number, number],
+      }));
   }
 
   const pdf = createTabularPdf({

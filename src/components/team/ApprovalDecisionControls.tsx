@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/approvals";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
+import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 type ApprovalKind = "time" | "leave" | "correction";
@@ -27,40 +28,48 @@ export function ApprovalDecisionControls({
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   async function decide(decision: "approve" | "reject") {
     setMessage(null);
+    setSuccess(null);
     if (!id || !id.trim()) {
       setMessage("Die Anfrage konnte nicht verarbeitet werden, weil keine gültige Kennung übergeben wurde.");
       return;
     }
     try {
+      let result: unknown;
       if (kind === "time") {
         if (decision === "approve") {
-          await approveTimeEntry(id, reason || undefined);
+          result = await approveTimeEntry(id, reason || undefined);
         } else {
-          await rejectTimeEntry(id, reason || undefined);
+          result = await rejectTimeEntry(id, reason || undefined);
         }
       }
 
       if (kind === "leave") {
         if (decision === "approve") {
-          await approveLeaveRequest({ leaveRequestId: id, reason: reason || null });
+          result = await approveLeaveRequest({ leaveRequestId: id, reason: reason || null });
         } else {
-          await rejectLeaveRequest({ leaveRequestId: id, reason: reason || null });
+          result = await rejectLeaveRequest({ leaveRequestId: id, reason: reason || null });
         }
       }
 
       if (kind === "correction") {
         if (decision === "approve") {
-          await approveTimeEntryChangeRequest({ changeRequestId: id, reason: reason || null });
+          result = await approveTimeEntryChangeRequest({ changeRequestId: id, reason: reason || null });
         } else {
-          await rejectTimeEntryChangeRequest({ changeRequestId: id, reason: reason || null });
+          result = await rejectTimeEntryChangeRequest({ changeRequestId: id, reason: reason || null });
         }
       }
 
-      router.refresh();
+      setSuccess(
+        getActionMessage(result, decision === "approve" ? "Freigabe wurde gespeichert." : "Ablehnung wurde gespeichert.")
+      );
+      if (!isDemoActionResult(result)) {
+        router.refresh();
+      }
     } catch (error) {
       setMessage(toGermanErrorMessage(error));
     }
@@ -93,6 +102,7 @@ export function ApprovalDecisionControls({
         </Button>
       </div>
       <FormMessage message={message} />
+      <FormMessage message={success} tone="success" />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { AppRole } from "@/src/lib/types/domain";
+import { buildAppHref } from "@/src/lib/demo/paths";
 
 export type NavItem = {
   href: string;
@@ -16,14 +17,27 @@ type NavigationModel = {
   sections: NavigationSection[];
 };
 
-export function getNavigationForRole(role: AppRole): NavigationModel {
+type NavigationRuntime = {
+  isDemo: boolean;
+  role: AppRole;
+  embed: boolean;
+  basePath: string;
+};
+
+function withRuntime(href: string, runtime: NavigationRuntime) {
+  return buildAppHref(href, runtime);
+}
+
+export function getNavigationForRole(role: AppRole, runtime?: NavigationRuntime): NavigationModel {
+  const currentRuntime = runtime ?? { isDemo: false, role, embed: false, basePath: "" };
+
   if (role === "employee") {
     return {
       primary: [
-        { href: "/heute", label: "Heute" },
-        { href: "/woche", label: "Woche" },
-        { href: "/abwesenheiten", label: "Abwesenheiten" },
-        { href: "/korrekturen", label: "Korrekturen" },
+        { href: withRuntime("/heute", currentRuntime), label: "Heute" },
+        { href: withRuntime("/woche", currentRuntime), label: "Woche" },
+        { href: withRuntime("/abwesenheiten", currentRuntime), label: "Abwesenheiten" },
+        { href: withRuntime("/korrekturen", currentRuntime), label: "Korrekturen" },
       ],
       sections: [],
     };
@@ -32,34 +46,88 @@ export function getNavigationForRole(role: AppRole): NavigationModel {
   if (role === "team_lead") {
     return {
       primary: [
-        { href: "/team/heute", label: "Team heute", matchPrefix: "/team/heute" },
-        { href: "/team/freigaben", label: "Freigaben", matchPrefix: "/team/freigaben" },
-        { href: "/team/kalender", label: "Kalender", matchPrefix: "/team/kalender" },
+        {
+          href: withRuntime("/team/heute", currentRuntime),
+          label: "Team heute",
+          matchPrefix: withRuntime("/team/heute", currentRuntime),
+        },
+        {
+          href: withRuntime("/team/freigaben", currentRuntime),
+          label: "Freigaben",
+          matchPrefix: withRuntime("/team/freigaben", currentRuntime),
+        },
+        {
+          href: withRuntime("/team/kalender", currentRuntime),
+          label: "Kalender",
+          matchPrefix: withRuntime("/team/kalender", currentRuntime),
+        },
       ],
       sections: [],
     };
   }
 
   return {
-    primary: [{ href: "/verwaltung/uebersicht", label: "Übersicht", matchPrefix: "/verwaltung/uebersicht" }],
+    primary: [
+      {
+        href: withRuntime("/verwaltung/uebersicht", currentRuntime),
+        label: "Übersicht",
+        matchPrefix: withRuntime("/verwaltung/uebersicht", currentRuntime),
+      },
+    ],
     sections: [
       {
         title: "Stammdaten",
         items: [
-          { href: "/verwaltung/stammdaten/mitarbeitende", label: "Mitarbeitende", matchPrefix: "/verwaltung/stammdaten/mitarbeitende" },
-          { href: "/verwaltung/stammdaten/teams", label: "Teams", matchPrefix: "/verwaltung/stammdaten/teams" },
-          { href: "/verwaltung/stammdaten/projekte", label: "Projekte", matchPrefix: "/verwaltung/stammdaten/projekte" },
-          { href: "/verwaltung/stammdaten/feiertage", label: "Feiertage", matchPrefix: "/verwaltung/stammdaten/feiertage" },
-          { href: "/verwaltung/einstellungen", label: "Einstellungen", matchPrefix: "/verwaltung/einstellungen" },
+          {
+            href: withRuntime("/verwaltung/stammdaten/mitarbeitende", currentRuntime),
+            label: "Mitarbeitende",
+            matchPrefix: withRuntime("/verwaltung/stammdaten/mitarbeitende", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/stammdaten/teams", currentRuntime),
+            label: "Teams",
+            matchPrefix: withRuntime("/verwaltung/stammdaten/teams", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/stammdaten/projekte", currentRuntime),
+            label: "Projekte",
+            matchPrefix: withRuntime("/verwaltung/stammdaten/projekte", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/stammdaten/feiertage", currentRuntime),
+            label: "Feiertage",
+            matchPrefix: withRuntime("/verwaltung/stammdaten/feiertage", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/einstellungen", currentRuntime),
+            label: "Einstellungen",
+            matchPrefix: withRuntime("/verwaltung/einstellungen", currentRuntime),
+          },
         ],
       },
       {
         title: "Steuerung",
         items: [
-          { href: "/verwaltung/steuerung/freigaben", label: "Freigaben", matchPrefix: "/verwaltung/steuerung/freigaben" },
-          { href: "/verwaltung/steuerung/kalender", label: "Kalender", matchPrefix: "/verwaltung/steuerung/kalender" },
-          { href: "/verwaltung/steuerung/auswertungen", label: "Auswertungen", matchPrefix: "/verwaltung/steuerung/auswertungen" },
-          { href: "/verwaltung/steuerung/exporte", label: "Exporte", matchPrefix: "/verwaltung/steuerung/exporte" },
+          {
+            href: withRuntime("/verwaltung/steuerung/freigaben", currentRuntime),
+            label: "Freigaben",
+            matchPrefix: withRuntime("/verwaltung/steuerung/freigaben", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/steuerung/kalender", currentRuntime),
+            label: "Kalender",
+            matchPrefix: withRuntime("/verwaltung/steuerung/kalender", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/steuerung/auswertungen", currentRuntime),
+            label: "Auswertungen",
+            matchPrefix: withRuntime("/verwaltung/steuerung/auswertungen", currentRuntime),
+          },
+          {
+            href: withRuntime("/verwaltung/steuerung/exporte", currentRuntime),
+            label: "Exporte",
+            matchPrefix: withRuntime("/verwaltung/steuerung/exporte", currentRuntime),
+          },
         ],
       },
     ],

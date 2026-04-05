@@ -43,7 +43,7 @@ export async function getMyCorrectionOverview() {
         .limit(20),
       admin
         .from("time_entry_change_requests")
-        .select("*, time_entries!inner(entry_date, started_at, ended_at, project_id, comment)")
+        .select("*, time_entries!inner(entry_date, started_at, ended_at, project_id, comment, projects(name, code))")
         .eq("requested_by_employee_id", employee.id)
         .order("created_at", { ascending: false }),
     ]);
@@ -315,13 +315,29 @@ export async function getApprovalCenterData() {
     return Date.now() - new Date(value).getTime() > 48 * 60 * 60 * 1000;
   };
 
-  const { data: employees, error } = await admin
-    .from("employees")
-    .select("id, first_name, last_name, team_id")
-    .in("id", matchIds);
+  const projectIds = Array.from(
+    new Set(
+      pending.changeRequests
+        .map((item) => item.proposed_project_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  );
 
-  if (error) {
-    throw new Error(error.message);
+  const [
+    { data: employees, error },
+    { data: projects, error: projectsError },
+  ] = await Promise.all([
+    admin
+      .from("employees")
+      .select("id, first_name, last_name, team_id")
+      .in("id", matchIds),
+    projectIds.length > 0
+      ? admin.from("projects").select("id, name, code").in("id", projectIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (error || projectsError) {
+    throw new Error(error?.message ?? projectsError?.message ?? "Freigabedaten konnten nicht geladen werden");
   }
 
   const employeeById = new Map(
@@ -331,6 +347,15 @@ export async function getApprovalCenterData() {
         id: employee.id,
         name: `${employee.first_name} ${employee.last_name}`,
         teamId: employee.team_id,
+      },
+    ])
+  );
+  const projectById = new Map(
+    (projects ?? []).map((project) => [
+      project.id,
+      {
+        name: project.name,
+        code: project.code,
       },
     ])
   );
@@ -428,7 +453,15 @@ export async function getApprovalCenterData() {
         : item.time_entries?.employee_id,
       dateLabel: Array.isArray(item.time_entries) ? item.time_entries[0]?.entry_date ?? null : null,
       age: item.created_at ?? item.updated_at ?? null,
-      payload: item,
+      payload: {
+        ...item,
+        proposed_project_name: item.proposed_project_id
+          ? projectById.get(item.proposed_project_id)?.name ?? null
+          : null,
+        proposed_project_code: item.proposed_project_id
+          ? projectById.get(item.proposed_project_id)?.code ?? null
+          : null,
+      },
     })
   );
 

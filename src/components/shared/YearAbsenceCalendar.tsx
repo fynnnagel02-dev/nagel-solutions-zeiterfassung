@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Modal } from "@/src/components/shared/Modal";
 import { Panel } from "@/src/components/shared/Panel";
+import { getLeaveTypeLabel } from "@/src/lib/presentation/leave";
 import {
   formatDate,
   formatDateRange,
@@ -18,7 +19,7 @@ type CalendarEmployee = {
 
 type LeaveRequest = {
   employee_id: string;
-  leave_type: "vacation" | "sick" | "other";
+  leave_type: "vacation" | "sick" | "medical" | "other";
   status: "pending" | "approved" | "rejected" | "cancelled";
   start_date: string;
   end_date: string;
@@ -67,16 +68,16 @@ function getEventTone(leaveType: LeaveRequest["leave_type"], status: LeaveReques
     return "bg-violet-500 text-white";
   }
 
+  if (leaveType === "medical") {
+    return "bg-cyan-600 text-white";
+  }
+
   return "bg-sky-600 text-white";
 }
 
 function getEventLabel(event: LeaveRequest) {
-  if (event.leave_type === "sick") {
-    return "Krank";
-  }
-
-  if (event.leave_type === "other") {
-    return "Sonstige Abwesenheit";
+  if (event.leave_type !== "vacation") {
+    return getLeaveTypeLabel(event.leave_type);
   }
 
   return event.status === "pending" ? "Urlaub angefragt" : "Urlaub";
@@ -265,6 +266,7 @@ export function YearAbsenceCalendar({
             <div className="space-y-2 text-sm text-[color:var(--color-text-soft)]">
               <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-sky-600" /> Urlaub</div>
               <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-rose-500" /> Krank</div>
+              <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-cyan-600" /> Arzt Besuch</div>
               <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-violet-500" /> Sonstige Abwesenheit</div>
               <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-amber-300" /> Ausstehend</div>
               <div className="flex items-center gap-3"><span className="h-3 w-8 rounded-full bg-slate-200" /> Feiertag</div>
@@ -468,7 +470,7 @@ export function YearAbsenceCalendar({
             <div className="rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-white px-4 py-4 text-sm text-[color:var(--color-text-soft)]">
               <p>Zeitraum: {formatDateRange(selectedEvent.start_date, selectedEvent.end_date)}</p>
               <p className="mt-2">
-                Typ: {selectedEvent.leave_type === "vacation" ? "Urlaub" : selectedEvent.leave_type === "sick" ? "Krank" : "Sonstige Abwesenheit"}
+                Typ: {getLeaveTypeLabel(selectedEvent.leave_type)}
               </p>
             </div>
           </div>

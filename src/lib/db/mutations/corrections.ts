@@ -5,7 +5,11 @@ import {
   assertHasEmployee,
   assertTeamLeadScopeForEmployee,
 } from "@/src/lib/auth/assertions";
-import { createSyntheticManualBreak } from "@/src/lib/domain/time-calculations";
+import {
+  createSyntheticManualBreak,
+  findAutoLegalBreakWindow,
+  getAdditionalAutoLegalBreakMinutes,
+} from "@/src/lib/domain/time-calculations";
 import { ConflictError, NotFoundError } from "@/src/lib/security/errors";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin-client";
 import {
@@ -26,6 +30,24 @@ async function getChangeRequest(changeRequestId: string) {
   }
 
   return data;
+}
+
+async function assertActiveProject(projectId: string | null | undefined) {
+  if (!projectId) {
+    throw new ConflictError("Bitte wählen Sie ein Projekt für die Korrektur aus.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new ConflictError("Bitte wählen Sie ein aktives Projekt für die Korrektur aus.");
+  }
 }
 
 export async function createTimeEntryChangeRequest(input: unknown) {
@@ -51,6 +73,8 @@ export async function createTimeEntryChangeRequest(input: unknown) {
   if (!entry.locked_at && entry.approval_status !== "approved" && entry.status !== "approved") {
     throw new ConflictError("Correction requests are only for locked or approved entries");
   }
+
+  await assertActiveProject(payload.proposedProjectId ?? null);
 
   const { data, error } = await admin
     .from("time_entry_change_requests")
@@ -146,9 +170,70 @@ export async function approveTimeEntryChangeRequest(input: unknown) {
     throw new Error(updatedEntryError?.message ?? "Updated time entry not found");
   }
 
+  const nonAutoBreaks = (updatedEntry.time_entry_breaks ?? []).filter(
+    (currentBreak: { source?: string | null }) => currentBreak.source !== "auto_legal"
+  );
+  const additionalMinutes =
+    updatedEntry.started_at && updatedEntry.ended_at
+      ? getAdditionalAutoLegalBreakMinutes({
+          startedAt: updatedEntry.started_at,
+          endedAt: updatedEntry.ended_at,
+          breaks: nonAutoBreaks,
+        })
+      : 0;
+
+  const { error: deleteAutoBreakError } = await admin
+    .from("time_entry_breaks")
+    .delete()
+    .eq("time_entry_id", updatedEntry.id)
+    .eq("source", "auto_legal");
+
+  if (deleteAutoBreakError) {
+    throw new Error(deleteAutoBreakError.message);
+  }
+
+  if (additionalMinutes > 0 && updatedEntry.started_at && updatedEntry.ended_at) {
+    const autoBreakWindow = findAutoLegalBreakWindow({
+      startedAt: updatedEntry.started_at,
+      endedAt: updatedEntry.ended_at,
+      breakMinutes: additionalMinutes,
+      existingBreaks: nonAutoBreaks,
+    });
+
+    const { error: insertAutoBreakError } = await admin.from("time_entry_breaks").insert({
+      time_entry_id: updatedEntry.id,
+      started_at: autoBreakWindow.startedAt,
+      ended_at: autoBreakWindow.endedAt,
+      source: "auto_legal",
+    });
+
+    if (insertAutoBreakError) {
+      const fallbackInsert = await admin.from("time_entry_breaks").insert({
+        time_entry_id: updatedEntry.id,
+        started_at: autoBreakWindow.startedAt,
+        ended_at: autoBreakWindow.endedAt,
+        source: "manual",
+      });
+
+      if (fallbackInsert.error) {
+        throw new Error(insertAutoBreakError.message);
+      }
+    }
+  }
+
+  const { data: refreshedEntry, error: refreshedEntryError } = await admin
+    .from("time_entries")
+    .select("*, time_entry_breaks(*)")
+    .eq("id", entry.id)
+    .single();
+
+  if (refreshedEntryError || !refreshedEntry) {
+    throw new Error(refreshedEntryError?.message ?? "Updated time entry not found");
+  }
+
   return {
     ...data,
-    updatedEntry,
+    updatedEntry: refreshedEntry,
     previousEntryState,
   };
 }

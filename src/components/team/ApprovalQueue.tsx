@@ -23,19 +23,31 @@ export type ApprovalItem = {
 };
 
 type CorrectionPayload = {
+  id?: string | null;
+  project_id?: string | null;
+  projects?: { name?: string | null; code?: string | null } | null;
+  time_entry_breaks?: Array<{ ended_at?: string | null; started_at?: string | null; source?: string | null }>;
+  comment?: string | null;
   proposed_started_at?: string | null;
   proposed_ended_at?: string | null;
   proposed_break_minutes?: number | null;
+  proposed_project_id?: string | null;
+  proposed_project_name?: string | null;
+  proposed_project_code?: string | null;
   proposed_comment?: string | null;
   time_entries?:
     | {
         started_at?: string | null;
         ended_at?: string | null;
+        project_id?: string | null;
+        projects?: { name?: string | null; code?: string | null };
         comment?: string | null;
       }
     | Array<{
         started_at?: string | null;
         ended_at?: string | null;
+        project_id?: string | null;
+        projects?: { name?: string | null; code?: string | null };
         comment?: string | null;
       }>;
 };
@@ -63,6 +75,12 @@ function renderDateLabel(item: ApprovalItem) {
 
 function renderDateTime(value: string | null | undefined) {
   return value ? formatDateTime(value) : "--";
+}
+
+function hasAutoLegalBreak(
+  breaks: Array<{ ended_at?: string | null; started_at?: string | null; source?: string | null }> | undefined
+) {
+  return Boolean(breaks?.some((item) => item.source === "auto_legal"));
 }
 
 export function ApprovalSection({
@@ -130,6 +148,10 @@ export function ApprovalSection({
 
                 {item.kind === "time" ? (
                   <div className="rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-white px-4 py-3 text-sm text-[color:var(--color-text-soft)]">
+                    <p>Projekt: {payload.projects?.name ?? "Nicht zugeordnet"}</p>
+                    {hasAutoLegalBreak(payload.time_entry_breaks) ? (
+                      <p>Gesetzliche Pause wurde automatisch ergänzt.</p>
+                    ) : null}
                     Kommentar: {(payload.comment as string | null) || "Kein Kommentar hinterlegt."}
                   </div>
                 ) : null}
@@ -148,6 +170,7 @@ export function ApprovalSection({
                       </p>
                       <p>Beginn {renderDateTime(currentEntry?.started_at)}</p>
                       <p>Ende {renderDateTime(currentEntry?.ended_at)}</p>
+                      <p>Projekt {currentEntry?.projects?.name || "—"}</p>
                       <p>Kommentar {currentEntry?.comment || "—"}</p>
                     </div>
                     <div className="rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-white px-4 py-3 text-sm text-[color:var(--color-text-soft)]">
@@ -157,6 +180,12 @@ export function ApprovalSection({
                       <p>Beginn {renderDateTime(payload.proposed_started_at)}</p>
                       <p>Ende {renderDateTime(payload.proposed_ended_at)}</p>
                       <p>Pause {(payload.proposed_break_minutes as number | null) ?? "--"} Min.</p>
+                      <p>
+                        Projekt{" "}
+                        {payload.proposed_project_name
+                          ? `${payload.proposed_project_name}${payload.proposed_project_code ? ` (${payload.proposed_project_code})` : ""}`
+                          : payload.proposed_project_id || "—"}
+                      </p>
                       <p>Kommentar {(payload.proposed_comment as string | null) || "—"}</p>
                     </div>
                   </div>

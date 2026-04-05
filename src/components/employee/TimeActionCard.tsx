@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { endBreak, endWorkday, startBreak, startWorkday, submitTimeEntryForApproval } from "@/app/actions/time";
+import { useAppHref } from "@/src/components/app/AppRuntimeProvider";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Panel } from "@/src/components/shared/Panel";
 import { StatusChip } from "@/src/components/shared/StatusChip";
+import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
 import { formatClock, formatMinutes } from "@/src/lib/presentation/format";
 import { getTimeEntryStatusPresentation } from "@/src/lib/presentation/status";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
@@ -22,7 +24,14 @@ type TodayEntry = {
   computedWorkedMinutes: number;
   computedBreakMinutes: number;
   targetMinutes: number;
-  time_entry_breaks?: Array<{ ended_at: string | null; started_at: string }>;
+  project_id: string | null;
+  projects?: { name?: string | null; code?: string | null } | null;
+  time_entry_breaks?: Array<{ ended_at: string | null; started_at: string; source?: string | null }>;
+};
+
+type ProjectOption = {
+  id: string;
+  name: string;
 };
 
 function getOpenBreak(entry: TodayEntry | null) {
@@ -62,7 +71,12 @@ function getTimelineItems(entry: TodayEntry | null) {
 
   for (const currentBreak of entry.time_entry_breaks ?? []) {
     items.push({
-      label: currentBreak.ended_at ? "Pause" : "Pause läuft",
+      label:
+        currentBreak.source === "auto_legal"
+          ? "Gesetzliche Pause"
+          : currentBreak.ended_at
+            ? "Pause"
+            : "Pause läuft",
       value: currentBreak.ended_at
         ? `${formatClock(currentBreak.started_at)} - ${formatClock(currentBreak.ended_at)}`
         : `seit ${formatClock(currentBreak.started_at)}`,
@@ -77,12 +91,22 @@ function getTimelineItems(entry: TodayEntry | null) {
   return items;
 }
 
-export function TimeActionCard({ entry }: { entry: TodayEntry | null }) {
+export function TimeActionCard({
+  entry,
+  projects,
+}: {
+  entry: TodayEntry | null;
+  projects: ProjectOption[];
+}) {
   const router = useRouter();
+  const weekHref = useAppHref("/woche");
+  const leaveHref = useAppHref("/abwesenheiten");
+  const correctionsHref = useAppHref("/korrekturen");
   const [now, setNow] = useState(() => Date.now());
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [projectId, setProjectId] = useState(() => entry?.project_id ?? projects[0]?.id ?? "");
 
   useEffect(() => {
     if (!entry?.started_at || entry.ended_at || getOpenBreak(entry)) {
@@ -93,21 +117,37 @@ export function TimeActionCard({ entry }: { entry: TodayEntry | null }) {
     return () => window.clearInterval(timer);
   }, [entry]);
 
+  useEffect(() => {
+    if (entry?.project_id) {
+      setProjectId(entry.project_id);
+      return;
+    }
+
+    if (!entry && projects.length > 0) {
+      setProjectId((current) => current || projects[0].id);
+    }
+  }, [entry, projects]);
+
   const openBreak = getOpenBreak(entry);
   const liveWorkedMinutes = useMemo(() => getLiveMinutes(entry, now), [entry, now]);
   const status = getTimeEntryStatusPresentation(entry?.status ?? "complete", entry?.approval_status, Boolean(openBreak));
   const delta = (entry?.targetMinutes ?? 0) - liveWorkedMinutes;
   const timelineItems = getTimelineItems(entry);
+  const currentProjectLabel =
+    entry?.projects?.name ?? projects.find((project) => project.id === projectId)?.name ?? null;
+  const autoLegalBreakPresent = Boolean(entry?.time_entry_breaks?.some((item) => item.source === "auto_legal"));
 
-  async function runAction(action: () => Promise<void>, successMessage: string) {
+  async function runAction(action: () => Promise<unknown>, successMessage: string) {
     setMessage(null);
     setSuccess(null);
 
     startTransition(async () => {
       try {
-        await action();
-        setSuccess(successMessage);
-        router.refresh();
+        const result = await action();
+        setSuccess(getActionMessage(result, successMessage));
+        if (!isDemoActionResult(result)) {
+          router.refresh();
+        }
       } catch (error) {
         setMessage(toGermanErrorMessage(error));
       }
@@ -235,22 +275,48 @@ export function TimeActionCard({ entry }: { entry: TodayEntry | null }) {
           </div>
 
           {!entry ? (
-            <Button
-              className="w-full py-4"
-              disabled={isPending}
-              onClick={() =>
-                runAction(
-                  () =>
-                    startWorkday({
-                      entryDate: new Date().toISOString().slice(0, 10),
-                      startedAt: new Date().toISOString(),
-                    }),
-                  "Arbeitstag gestartet."
-                )
-              }
-            >
-              {isPending ? "Wird gestartet..." : "Arbeitstag starten"}
-            </Button>
+            <div className="space-y-3">
+              {projects.length > 0 ? (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[color:var(--color-text)]">Projekt für heute</label>
+                    <select
+                      value={projectId}
+                      onChange={(event) => setProjectId(event.target.value)}
+                      className="w-full rounded-2xl border border-[color:var(--color-border-strong)] bg-white px-4 py-3 text-sm"
+                    >
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <Button
+                    className="w-full py-4"
+                    disabled={isPending || !projectId}
+                    onClick={() =>
+                      runAction(
+                        () =>
+                          startWorkday({
+                            entryDate: new Date().toISOString().slice(0, 10),
+                            startedAt: new Date().toISOString(),
+                            projectId,
+                          }),
+                        "Arbeitstag gestartet."
+                      )
+                    }
+                  >
+                    {isPending ? "Wird gestartet..." : "Arbeitstag starten"}
+                  </Button>
+                </>
+              ) : (
+                <div className="rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-[color:var(--color-panel-soft)] p-4 text-sm leading-6 text-[color:var(--color-text-soft)]">
+                  Es ist aktuell kein aktives Projekt zugeordnet. Bitte legen Sie zuerst ein Projekt an oder
+                  nutzen Sie das Sammelprojekt <span className="font-medium text-[color:var(--color-text)]">Intern / Allgemein</span>.
+                </div>
+              )}
+            </div>
           ) : null}
 
           {entry && !entry.ended_at && !openBreak ? (
@@ -316,11 +382,21 @@ export function TimeActionCard({ entry }: { entry: TodayEntry | null }) {
           ) : null}
 
           <div className="rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-[color:var(--color-panel-soft)] p-4 text-sm leading-6 text-[color:var(--color-text-soft)]">
-            {openBreak
-              ? "Ihre Pause läuft aktuell. Erst nach dem Pausenende kann der Arbeitstag abgeschlossen werden."
-              : entry?.approval_status === "pending"
-                ? "Der heutige Eintrag wurde bereits eingereicht und wartet auf Freigabe."
-                : "Für Nachträge oder Korrekturen steht die Wochenansicht mit manueller Erfassung bereit."}
+            {currentProjectLabel ? (
+              <p className="mb-2 font-medium text-[color:var(--color-text)]">Projekt: {currentProjectLabel}</p>
+            ) : null}
+            {autoLegalBreakPresent ? (
+              <p className="mb-2 text-[color:var(--color-text)]">
+                Eine gesetzliche Mindestpause wurde automatisch ergänzt und bleibt im Tagesablauf sichtbar.
+              </p>
+            ) : null}
+            <p>
+              {openBreak
+                ? "Ihre Pause läuft aktuell. Erst nach dem Pausenende kann der Arbeitstag abgeschlossen werden."
+                : entry?.approval_status === "pending"
+                  ? "Der heutige Eintrag wurde bereits eingereicht und wartet auf Freigabe."
+                  : "Für Nachträge oder Korrekturen steht die Wochenansicht mit manueller Erfassung bereit."}
+            </p>
           </div>
 
           <div className="grid gap-3 rounded-[1.5rem] border border-[color:var(--color-border-soft)] bg-[color:var(--color-panel-soft)] p-4">
@@ -334,19 +410,19 @@ export function TimeActionCard({ entry }: { entry: TodayEntry | null }) {
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
               <Link
-                href="/woche"
+                href={weekHref}
                 className="rounded-2xl border border-[color:var(--color-border-soft)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--color-text)]"
               >
                 Woche prüfen
               </Link>
               <Link
-                href="/abwesenheiten"
+                href={leaveHref}
                 className="rounded-2xl border border-[color:var(--color-border-soft)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--color-text)]"
               >
                 Abwesenheit
               </Link>
               <Link
-                href="/korrekturen"
+                href={correctionsHref}
                 className="rounded-2xl border border-[color:var(--color-border-soft)] bg-white px-4 py-3 text-sm font-semibold text-[color:var(--color-text)]"
               >
                 Korrekturen

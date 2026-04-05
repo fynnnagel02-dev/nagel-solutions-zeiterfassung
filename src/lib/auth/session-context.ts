@@ -3,10 +3,18 @@ import "server-only";
 import { cache } from "react";
 
 import { AuthenticationError, NotFoundError } from "@/src/lib/security/errors";
+import { getDemoSessionContext } from "@/src/lib/demo/session";
+import { getAppRuntimeState } from "@/src/lib/demo/runtime";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server-client";
 import type { SessionContext } from "@/src/lib/types/domain";
 
 export const getCurrentSessionContext = cache(async (): Promise<SessionContext> => {
+  const runtime = await getAppRuntimeState();
+
+  if (runtime.isDemo) {
+    return getDemoSessionContext(runtime.role);
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -56,5 +64,11 @@ export const getCurrentSessionContext = cache(async (): Promise<SessionContext> 
           targetWeeklyMinutesOverride: employee.target_weekly_minutes_override,
         }
       : null,
+    runtime: {
+      mode: "real",
+      basePath: "",
+      role: profile.role,
+      embed: false,
+    },
   };
 });

@@ -12,6 +12,7 @@ export const liveWorkdaySchema = z.object({
   employeeId: uuidSchema.optional(),
   entryDate: isoDateSchema,
   startedAt: isoDateTimeSchema,
+  projectId: uuidSchema,
 });
 
 export const startBreakSchema = z.object({
@@ -35,7 +36,7 @@ export const manualTimeEntrySchema = z.object({
   startedAt: isoDateTimeSchema,
   endedAt: isoDateTimeSchema,
   breakMinutes: positiveMinutesSchema.default(0),
-  projectId: uuidSchema.nullable().optional(),
+  projectId: uuidSchema,
   comment: optionalCommentSchema,
 });
 

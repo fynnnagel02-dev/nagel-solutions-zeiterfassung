@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { AdminWorkSchedulesRedirectScreen } from "@/src/screens/admin/AdminWorkSchedulesRedirectScreen";
 
-export default function AdminWorkSchedulesRedirectPage() {
-  redirect("/verwaltung/einstellungen");
+export default async function AdminWorkSchedulesRedirectPage() {
+  return AdminWorkSchedulesRedirectScreen();
 }

@@ -9,6 +9,7 @@ import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Modal } from "@/src/components/shared/Modal";
 import { Panel } from "@/src/components/shared/Panel";
+import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 import { formatDate, getMonthOptions } from "@/src/lib/presentation/format";
 
@@ -52,6 +53,7 @@ export function HolidayCalendarBoard({
   const [selectedHoliday, setSelectedHoliday] = useState<HolidayGroupRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"error" | "success">("success");
   const [isPending, startTransition] = useTransition();
 
   const monthOptions = getMonthOptions(year);
@@ -156,10 +158,15 @@ export function HolidayCalendarBoard({
                   startTransition(async () => {
                     try {
                       setMessage(null);
-                      await deleteHoliday({ holidayIds: selectedHoliday.holidayIds });
+                      setMessageTone("success");
+                      const result = await deleteHoliday({ holidayIds: selectedHoliday.holidayIds });
+                      setMessage(getActionMessage(result, "Feiertag wurde gelöscht."));
                       setSelectedHoliday(null);
-                      router.refresh();
+                      if (!isDemoActionResult(result)) {
+                        router.refresh();
+                      }
                     } catch (error) {
+                      setMessageTone("error");
                       setMessage(toGermanErrorMessage(error));
                     }
                   })
@@ -168,7 +175,7 @@ export function HolidayCalendarBoard({
                 Löschen
               </Button>
             </div>
-            <FormMessage message={message} />
+            <FormMessage message={message} tone={messageTone} />
           </div>
         ) : null}
       </Modal>
