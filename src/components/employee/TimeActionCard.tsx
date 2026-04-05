@@ -10,7 +10,7 @@ import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Panel } from "@/src/components/shared/Panel";
 import { StatusChip } from "@/src/components/shared/StatusChip";
-import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
+import { getActionMessage, getActionSuccessTone, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { formatClock, formatMinutes } from "@/src/lib/presentation/format";
 import { getTimeEntryStatusPresentation } from "@/src/lib/presentation/status";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
@@ -105,6 +105,7 @@ export function TimeActionCard({
   const [now, setNow] = useState(() => Date.now());
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
   const [projectId, setProjectId] = useState(() => entry?.project_id ?? projects[0]?.id ?? "");
 
@@ -145,6 +146,7 @@ export function TimeActionCard({
       try {
         const result = await action();
         setSuccess(getActionMessage(result, successMessage));
+        setSuccessTone(getActionSuccessTone(result));
         if (!isDemoActionResult(result)) {
           router.refresh();
         }
@@ -431,7 +433,7 @@ export function TimeActionCard({
           </div>
 
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </div>
     </Panel>

@@ -9,7 +9,7 @@ import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Modal } from "@/src/components/shared/Modal";
 import { Panel } from "@/src/components/shared/Panel";
-import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
+import { getActionMessage, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 import { formatDate, getMonthOptions } from "@/src/lib/presentation/format";
 
@@ -53,7 +53,7 @@ export function HolidayCalendarBoard({
   const [selectedHoliday, setSelectedHoliday] = useState<HolidayGroupRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [messageTone, setMessageTone] = useState<"error" | "success">("success");
+  const [messageTone, setMessageTone] = useState<"error" | "success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   const monthOptions = getMonthOptions(year);
@@ -160,9 +160,10 @@ export function HolidayCalendarBoard({
                       setMessage(null);
                       setMessageTone("success");
                       const result = await deleteHoliday({ holidayIds: selectedHoliday.holidayIds });
+                      setMessageTone(getActionTone(result, "success"));
                       setMessage(getActionMessage(result, "Feiertag wurde gelöscht."));
-                      setSelectedHoliday(null);
                       if (!isDemoActionResult(result)) {
+                        setSelectedHoliday(null);
                         router.refresh();
                       }
                     } catch (error) {

@@ -2,11 +2,14 @@ import "server-only";
 
 import { z } from "zod";
 
+import { DEMO_EXPORT_MESSAGE, DEMO_READONLY_MESSAGE } from "@/src/lib/demo/messages";
+
 export type DemoActionResult<TPayload extends Record<string, unknown> = Record<string, unknown>> = {
   ok: true;
   simulated: true;
   kind: string;
   message: string;
+  tone: "warning" | "info";
   payload: TPayload;
 };
 
@@ -17,13 +20,15 @@ function timestamp() {
 function makeResult<TPayload extends Record<string, unknown>>(
   kind: string,
   message: string,
-  payload: TPayload
+  payload: TPayload,
+  tone: "warning" | "info" = "warning"
 ): DemoActionResult<TPayload> {
   return {
     ok: true,
     simulated: true,
     kind,
     message,
+    tone,
     payload,
   };
 }
@@ -33,7 +38,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
     const payload = z
       .object({ entryDate: z.string(), startedAt: z.string(), projectId: z.string() })
       .parse(input);
-    return makeResult("simulated_workday_started", "Demo-Modus: Arbeitsbeginn wurde simuliert.", {
+    return makeResult("simulated_workday_started", DEMO_READONLY_MESSAGE, {
       entryDate: payload.entryDate,
       startedAt: payload.startedAt,
       projectId: payload.projectId,
@@ -43,7 +48,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
 
   if (kind === "startBreak") {
     const payload = z.object({ timeEntryId: z.string(), startedAt: z.string() }).parse(input);
-    return makeResult("simulated_break_started", "Demo-Modus: Pausenbeginn wurde simuliert.", {
+    return makeResult("simulated_break_started", DEMO_READONLY_MESSAGE, {
       timeEntryId: payload.timeEntryId,
       startedAt: payload.startedAt,
       simulatedAt: timestamp(),
@@ -52,7 +57,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
 
   if (kind === "endBreak") {
     const payload = z.object({ timeEntryId: z.string(), endedAt: z.string() }).parse(input);
-    return makeResult("simulated_break_ended", "Demo-Modus: Pausenende wurde simuliert.", {
+    return makeResult("simulated_break_ended", DEMO_READONLY_MESSAGE, {
       timeEntryId: payload.timeEntryId,
       endedAt: payload.endedAt,
       simulatedAt: timestamp(),
@@ -61,7 +66,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
 
   if (kind === "endWorkday") {
     const payload = z.object({ timeEntryId: z.string(), endedAt: z.string() }).parse(input);
-    return makeResult("simulated_workday_ended", "Demo-Modus: Arbeitsende wurde simuliert.", {
+    return makeResult("simulated_workday_ended", DEMO_READONLY_MESSAGE, {
       timeEntryId: payload.timeEntryId,
       endedAt: payload.endedAt,
       simulatedAt: timestamp(),
@@ -78,7 +83,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
         projectId: z.string().nullable().optional(),
       })
       .parse(input);
-    return makeResult("simulated_time_entry_saved", "Demo-Modus: Zeiteintrag wurde simuliert gespeichert.", {
+    return makeResult("simulated_time_entry_saved", DEMO_READONLY_MESSAGE, {
       entryDate: payload.entryDate ?? null,
       timeEntryId: payload.timeEntryId ?? null,
       startedAt: payload.startedAt ?? null,
@@ -90,7 +95,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
 
   if (kind === "reopenTimeEntry") {
     const payload = z.object({ timeEntryId: z.string(), reason: z.string().optional() }).parse(input);
-    return makeResult("simulated_time_entry_reopened", "Demo-Modus: Wiederoeffnung des Zeiteintrags wurde simuliert.", {
+    return makeResult("simulated_time_entry_reopened", DEMO_READONLY_MESSAGE, {
       timeEntryId: payload.timeEntryId,
       reason: payload.reason ?? null,
       simulatedAt: timestamp(),
@@ -98,7 +103,7 @@ export function simulateTimeAction(kind: string, input: unknown) {
   }
 
   const payload = z.object({ timeEntryId: z.string() }).parse(input);
-  return makeResult("simulated_time_entry_submitted", "Demo-Modus: Zeiteintrag wurde simuliert eingereicht.", {
+  return makeResult("simulated_time_entry_submitted", DEMO_READONLY_MESSAGE, {
     timeEntryId: payload.timeEntryId,
     simulatedAt: timestamp(),
   });
@@ -109,9 +114,7 @@ export function simulateApprovalAction(kind: string, input: unknown) {
     const payload = z.object({ timeEntryId: z.string(), reason: z.string().optional() }).parse(input);
     return makeResult(
       kind === "approveTimeEntry" ? "simulated_time_entry_approved" : "simulated_time_entry_rejected",
-      kind === "approveTimeEntry"
-        ? "Demo-Modus: Zeitfreigabe wurde simuliert."
-        : "Demo-Modus: Zeitablehnung wurde simuliert.",
+      DEMO_READONLY_MESSAGE,
       { timeEntryId: payload.timeEntryId, reason: payload.reason ?? null, simulatedAt: timestamp() }
     );
   }
@@ -120,9 +123,7 @@ export function simulateApprovalAction(kind: string, input: unknown) {
     const payload = z.object({ leaveRequestId: z.string(), reason: z.string().nullable().optional() }).parse(input);
     return makeResult(
       kind === "approveLeaveRequest" ? "simulated_leave_request_approved" : "simulated_leave_request_rejected",
-      kind === "approveLeaveRequest"
-        ? "Demo-Modus: Abwesenheit wurde simuliert genehmigt."
-        : "Demo-Modus: Abwesenheit wurde simuliert abgelehnt.",
+      DEMO_READONLY_MESSAGE,
       { leaveRequestId: payload.leaveRequestId, reason: payload.reason ?? null, simulatedAt: timestamp() }
     );
   }
@@ -132,9 +133,7 @@ export function simulateApprovalAction(kind: string, input: unknown) {
     kind === "approveTimeEntryChangeRequest"
       ? "simulated_correction_request_approved"
       : "simulated_correction_request_rejected",
-    kind === "approveTimeEntryChangeRequest"
-      ? "Demo-Modus: Korrektur wurde simuliert freigegeben."
-      : "Demo-Modus: Korrektur wurde simuliert abgelehnt.",
+    DEMO_READONLY_MESSAGE,
     { changeRequestId: payload.changeRequestId, reason: payload.reason ?? null, simulatedAt: timestamp() }
   );
 }
@@ -151,7 +150,7 @@ export function simulateLeaveAction(kind: string, input: unknown) {
         partialEndTime: z.string().nullable().optional(),
       })
       .parse(input);
-    return makeResult("simulated_leave_request_created", "Demo-Modus: Abwesenheitsantrag wurde simuliert erstellt.", {
+    return makeResult("simulated_leave_request_created", DEMO_READONLY_MESSAGE, {
       leaveType: payload.leaveType,
       startDate: payload.startDate,
       endDate: payload.endDate,
@@ -163,7 +162,7 @@ export function simulateLeaveAction(kind: string, input: unknown) {
   }
 
   const payload = z.object({ leaveRequestId: z.string() }).parse(input);
-  return makeResult("simulated_leave_request_cancelled", "Demo-Modus: Stornierung wurde simuliert.", {
+  return makeResult("simulated_leave_request_cancelled", DEMO_READONLY_MESSAGE, {
     leaveRequestId: payload.leaveRequestId,
     simulatedAt: timestamp(),
   });
@@ -180,7 +179,7 @@ export function simulateCorrectionAction(kind: string, input: unknown) {
       .parse(input);
     return makeResult(
       "simulated_correction_request_created",
-      "Demo-Modus: Korrekturanfrage wurde simuliert eingereicht.",
+      DEMO_READONLY_MESSAGE,
       {
         timeEntryId: payload.timeEntryId,
         reason: payload.reason,
@@ -191,33 +190,14 @@ export function simulateCorrectionAction(kind: string, input: unknown) {
   }
 
   const payload = z.object({ changeRequestId: z.string() }).parse({ changeRequestId: input });
-  return makeResult("simulated_correction_request_withdrawn", "Demo-Modus: Rückzug der Korrektur wurde simuliert.", {
+  return makeResult("simulated_correction_request_withdrawn", DEMO_READONLY_MESSAGE, {
     changeRequestId: payload.changeRequestId,
     simulatedAt: timestamp(),
   });
 }
 
 export function simulateAdminAction(kind: string, input: unknown) {
-  const messages: Record<string, string> = {
-    employee_created: "Demo-Modus: Mitarbeitende Person wurde simuliert angelegt.",
-    employee_updated: "Demo-Modus: Mitarbeitendenprofil wurde simuliert aktualisiert.",
-    employee_deactivated: "Demo-Modus: Deaktivierung wurde simuliert.",
-    team_created: "Demo-Modus: Team wurde simuliert angelegt.",
-    team_updated: "Demo-Modus: Teamaenderung wurde simuliert.",
-    team_archived: "Demo-Modus: Teamarchivierung wurde simuliert.",
-    team_lead_assigned: "Demo-Modus: Teamleitung wurde simuliert zugewiesen.",
-    work_schedule_created: "Demo-Modus: Arbeitszeitmodell wurde simuliert angelegt.",
-    work_schedule_updated: "Demo-Modus: Arbeitszeitmodell wurde simuliert aktualisiert.",
-    company_settings_updated: "Demo-Modus: Unternehmenseinstellungen wurden simuliert gespeichert.",
-    project_created: "Demo-Modus: Projekt wurde simuliert angelegt.",
-    project_updated: "Demo-Modus: Projekt wurde simuliert aktualisiert.",
-    project_archived: "Demo-Modus: Projektarchivierung wurde simuliert.",
-    holiday_created: "Demo-Modus: Feiertag wurde simuliert angelegt.",
-    holiday_updated: "Demo-Modus: Feiertag wurde simuliert aktualisiert.",
-    holiday_deleted: "Demo-Modus: Feiertag wurde simuliert geloescht.",
-  };
-
-  return makeResult(`simulated_${kind}`, messages[kind] ?? "Demo-Modus: Verwaltungsaktion wurde simuliert.", {
+  return makeResult(`simulated_${kind}`, DEMO_READONLY_MESSAGE, {
     input: typeof input === "object" && input ? input : { value: input ?? null },
     simulatedAt: timestamp(),
   });
@@ -235,7 +215,7 @@ export function simulateExportAction(input: unknown) {
     })
     .parse(input);
 
-  return makeResult("simulated_export_started", "Demo-Modus: PDF-Export wurde simuliert vorbereitet.", {
+  return makeResult("simulated_export_started", DEMO_EXPORT_MESSAGE, {
     exportType: payload.exportType,
     dateFrom: payload.dateFrom,
     dateTo: payload.dateTo,

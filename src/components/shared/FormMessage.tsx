@@ -2,13 +2,14 @@ import { cn } from "@/src/lib/presentation/cn";
 
 type FormMessageProps = {
   message?: string | null;
-  tone?: "error" | "success" | "muted";
+  tone?: "error" | "success" | "muted" | "warning";
 };
 
 const toneMap = {
   error: "border-rose-200 bg-rose-50 text-rose-700",
   success: "border-emerald-200 bg-emerald-50 text-emerald-700",
   muted: "border-slate-200 bg-slate-50 text-slate-600",
+  warning: "border-amber-200 bg-amber-50 text-amber-800",
 };
 
 export function FormMessage({ message, tone = "error" }: FormMessageProps) {

@@ -7,7 +7,7 @@ import { saveManualTimeEntry, updateEditableTimeEntry } from "@/app/actions/time
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Panel } from "@/src/components/shared/Panel";
-import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
+import { getActionMessage, getActionSuccessTone, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 type Entry = {
@@ -52,6 +52,7 @@ export function ManualEntryEditor({
   const [projectId, setProjectId] = useState(entry.projectId ?? projects[0]?.id ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   const actionLabel = useMemo(() => {
@@ -169,9 +170,10 @@ export function ManualEntryEditor({
                       : await saveManualTimeEntry(payload);
 
                     setSuccess(getActionMessage(result, "Eintrag gespeichert."));
-                    setOpen(false);
+                    setSuccessTone(getActionSuccessTone(result));
 
                     if (!isDemoActionResult(result)) {
+                      setOpen(false);
                       router.refresh();
                     }
                   } catch (error) {
@@ -188,7 +190,7 @@ export function ManualEntryEditor({
           </div>
 
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </Panel>
       ) : null}
     </div>

@@ -13,7 +13,7 @@ import {
 } from "@/app/actions/approvals";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
-import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
+import { getActionMessage, getActionSuccessTone, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 type ApprovalKind = "time" | "leave" | "correction";
@@ -29,6 +29,7 @@ export function ApprovalDecisionControls({
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   async function decide(decision: "approve" | "reject") {
@@ -67,6 +68,7 @@ export function ApprovalDecisionControls({
       setSuccess(
         getActionMessage(result, decision === "approve" ? "Freigabe wurde gespeichert." : "Ablehnung wurde gespeichert.")
       );
+      setSuccessTone(getActionSuccessTone(result));
       if (!isDemoActionResult(result)) {
         router.refresh();
       }
@@ -102,7 +104,7 @@ export function ApprovalDecisionControls({
         </Button>
       </div>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </div>
   );
 }

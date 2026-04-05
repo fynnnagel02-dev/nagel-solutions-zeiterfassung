@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { cancelLeaveRequest, createLeaveRequest } from "@/app/actions/leave";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
-import { isDemoActionResult, getActionMessage } from "@/src/lib/demo/client";
+import { getActionMessage, getActionSuccessTone, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 export function LeaveRequestForm() {
@@ -14,6 +14,7 @@ export function LeaveRequestForm() {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [leaveType, setLeaveType] = useState<"vacation" | "sick" | "medical" | "other">("vacation");
@@ -158,11 +159,12 @@ export function LeaveRequestForm() {
                 comment: comment || null,
               });
               setSuccess(getActionMessage(result, "Abwesenheit beantragt."));
-              setStartDate("");
-              setEndDate("");
-              setDurationMode("full_day");
-              setComment("");
+              setSuccessTone(getActionSuccessTone(result));
               if (!isDemoActionResult(result)) {
+                setStartDate("");
+                setEndDate("");
+                setDurationMode("full_day");
+                setComment("");
                 router.refresh();
               }
             } catch (error) {
@@ -175,7 +177,7 @@ export function LeaveRequestForm() {
       </Button>
 
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </div>
   );
 }
@@ -184,7 +186,7 @@ export function CancelLeaveButton({ leaveRequestId }: { leaveRequestId: string }
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-  const [tone, setTone] = useState<"error" | "success">("success");
+  const [tone, setTone] = useState<"error" | "success" | "warning">("success");
 
   return (
     <div className="space-y-2">
@@ -196,7 +198,7 @@ export function CancelLeaveButton({ leaveRequestId }: { leaveRequestId: string }
           startTransition(async () => {
             try {
               const result = await cancelLeaveRequest({ leaveRequestId });
-              setTone("success");
+              setTone(getActionTone(result, "success"));
               setMessage(getActionMessage(result, "Abwesenheit wurde storniert."));
               if (!isDemoActionResult(result)) {
                 router.refresh();

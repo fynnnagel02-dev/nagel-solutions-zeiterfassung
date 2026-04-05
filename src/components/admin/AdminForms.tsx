@@ -27,7 +27,8 @@ import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
 import { Modal } from "@/src/components/shared/Modal";
 import { Panel } from "@/src/components/shared/Panel";
-import { getActionMessage } from "@/src/lib/demo/client";
+import { getActionMessage, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
+import { DEMO_EXPORT_MESSAGE } from "@/src/lib/demo/messages";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 import { ALL_GERMAN_STATE_CODES, GERMAN_STATE_OPTIONS } from "@/src/lib/presentation/germany";
 import { minutesToInputValue, parseHoursAndMinutes } from "@/src/lib/presentation/format";
@@ -98,6 +99,14 @@ function parseTimeInputOrThrow(value: string, label: string) {
     throw new Error(`${label} bitte als Dezimalstunden eingeben, z. B. 3,50.`);
   }
   return parsed;
+}
+
+function resolveActionOutcome(result: unknown, fallback: string) {
+  return {
+    simulated: isDemoActionResult(result),
+    message: getActionMessage(result, fallback),
+    tone: getActionTone(result, "success") as "success" | "warning",
+  };
 }
 
 function LabeledField({
@@ -254,6 +263,7 @@ export function EmployeeAdminForm({
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [form, setForm] = useState({
     email: "",
     role: "employee",
@@ -317,7 +327,7 @@ export function EmployeeAdminForm({
             try {
               setMessage(null);
               setSuccess(null);
-              await createEmployee({
+              const result = await createEmployee({
                 email: form.email,
                 role: form.role as "employee" | "team_lead" | "admin",
                 firstName: form.firstName,
@@ -326,8 +336,12 @@ export function EmployeeAdminForm({
                 workScheduleId: form.workScheduleId || null,
                 employmentStartDate: form.employmentStartDate,
               });
-              setSuccess("Mitarbeitende Person wurde angelegt.");
-              router.refresh();
+              const outcome = resolveActionOutcome(result, "Mitarbeitende Person wurde angelegt.");
+              setSuccess(outcome.message);
+              setSuccessTone(outcome.tone);
+              if (!outcome.simulated) {
+                router.refresh();
+              }
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -337,7 +351,7 @@ export function EmployeeAdminForm({
         {isPending ? "Wird angelegt..." : "Mitarbeitende anlegen"}
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -356,6 +370,7 @@ export function EmployeeRowActions({
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [form, setForm] = useState({
     firstName: employee.first_name,
     lastName: employee.last_name,
@@ -418,10 +433,14 @@ export function EmployeeRowActions({
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await deactivateEmployee(employee.id, "Deaktiviert über Verwaltungsoberfläche");
-                    setSuccess("Mitarbeitende Person wurde deaktiviert.");
-                    router.refresh();
-                    setOpen(false);
+                    const result = await deactivateEmployee(employee.id, "Deaktiviert über Verwaltungsoberfläche");
+                    const outcome = resolveActionOutcome(result, "Mitarbeitende Person wurde deaktiviert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -438,7 +457,7 @@ export function EmployeeRowActions({
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await updateEmployee({
+                    const result = await updateEmployee({
                       employeeId: employee.id,
                       firstName: form.firstName,
                       lastName: form.lastName,
@@ -446,9 +465,13 @@ export function EmployeeRowActions({
                       workScheduleId: form.workScheduleId || null,
                       role: form.role as "employee" | "team_lead" | "admin",
                     });
-                    setSuccess("Mitarbeitende Person wurde aktualisiert.");
-                    router.refresh();
-                    setOpen(false);
+                    const outcome = resolveActionOutcome(result, "Mitarbeitende Person wurde aktualisiert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -459,7 +482,7 @@ export function EmployeeRowActions({
             </Button>
           </div>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </Modal>
     </>
@@ -471,6 +494,7 @@ export function TeamAdminForm() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -487,9 +511,13 @@ export function TeamAdminForm() {
             try {
               setMessage(null);
               setSuccess(null);
-              await createTeam({ name });
-              setSuccess("Team wurde angelegt.");
-              router.refresh();
+              const result = await createTeam({ name });
+              const outcome = resolveActionOutcome(result, "Team wurde angelegt.");
+              setSuccess(outcome.message);
+              setSuccessTone(outcome.tone);
+              if (!outcome.simulated) {
+                router.refresh();
+              }
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -499,7 +527,7 @@ export function TeamAdminForm() {
         Team anlegen
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -521,6 +549,7 @@ export function TeamRowActions({
   );
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
   const allEmployees = employees.slice().sort((left, right) =>
     `${left.last_name} ${left.first_name}`.localeCompare(`${right.last_name} ${right.first_name}`, "de")
@@ -595,10 +624,14 @@ export function TeamRowActions({
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await archiveTeam({ teamId: team.id });
-                    setSuccess("Team wurde archiviert.");
-                    router.refresh();
-                    setOpen(false);
+                    const result = await archiveTeam({ teamId: team.id });
+                    const outcome = resolveActionOutcome(result, "Team wurde archiviert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -615,11 +648,15 @@ export function TeamRowActions({
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await updateTeam({ teamId: team.id, name, isActive, memberIds });
+                    const result = await updateTeam({ teamId: team.id, name, isActive, memberIds });
                     await assignTeamLead({ teamId: team.id, teamLeadEmployeeId: leadId || null });
-                    setSuccess("Team wurde aktualisiert.");
-                    router.refresh();
-                    setOpen(false);
+                    const outcome = resolveActionOutcome(result, "Team wurde aktualisiert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -630,7 +667,7 @@ export function TeamRowActions({
             </Button>
           </div>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </Modal>
     </>
@@ -651,6 +688,7 @@ export function WorkScheduleCreateForm() {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [name, setName] = useState("");
   const [weeklyTargetMinutes, setWeeklyTargetMinutes] = useState("40,00");
   const [isActive, setIsActive] = useState(true);
@@ -677,7 +715,7 @@ export function WorkScheduleCreateForm() {
             try {
               setMessage(null);
               setSuccess(null);
-              await createWorkSchedule({
+              const result = await createWorkSchedule({
                 name,
                 weeklyTargetMinutes: parseTimeInputOrThrow(weeklyTargetMinutes, "Wochenziel"),
                 days: days.map((day) => ({
@@ -687,8 +725,12 @@ export function WorkScheduleCreateForm() {
                 })),
                 isActive,
               });
-              setSuccess("Arbeitszeitmodell wurde angelegt.");
-              router.refresh();
+              const outcome = resolveActionOutcome(result, "Arbeitszeitmodell wurde angelegt.");
+              setSuccess(outcome.message);
+              setSuccessTone(outcome.tone);
+              if (!outcome.simulated) {
+                router.refresh();
+              }
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -698,7 +740,7 @@ export function WorkScheduleCreateForm() {
         Modell anlegen
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -709,6 +751,7 @@ export function WorkScheduleRowActions({ schedule }: { schedule: WorkScheduleAdm
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [name, setName] = useState(schedule.name);
   const [weeklyTargetMinutes, setWeeklyTargetMinutes] = useState(minutesToInputValue(schedule.weekly_target_minutes));
   const [isActive, setIsActive] = useState(schedule.is_active ?? true);
@@ -755,7 +798,7 @@ export function WorkScheduleRowActions({ schedule }: { schedule: WorkScheduleAdm
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await updateWorkSchedule({
+                    const result = await updateWorkSchedule({
                       workScheduleId: schedule.id,
                       name,
                       weeklyTargetMinutes: parseTimeInputOrThrow(weeklyTargetMinutes, "Wochenziel"),
@@ -766,9 +809,13 @@ export function WorkScheduleRowActions({ schedule }: { schedule: WorkScheduleAdm
                       })),
                       isActive,
                     });
-                    setSuccess("Arbeitszeitmodell wurde aktualisiert.");
-                    router.refresh();
-                    setOpen(false);
+                    const outcome = resolveActionOutcome(result, "Arbeitszeitmodell wurde aktualisiert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -779,7 +826,7 @@ export function WorkScheduleRowActions({ schedule }: { schedule: WorkScheduleAdm
             </Button>
           </div>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </Modal>
     </>
@@ -794,6 +841,7 @@ export function ProjectAdminForm() {
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
 
   return (
     <Panel className="space-y-4">
@@ -817,9 +865,13 @@ export function ProjectAdminForm() {
             try {
               setMessage(null);
               setSuccess(null);
-              await createProject({ name, code: code || null, description: description || null });
-              setSuccess("Projekt wurde angelegt.");
-              router.refresh();
+              const result = await createProject({ name, code: code || null, description: description || null });
+              const outcome = resolveActionOutcome(result, "Projekt wurde angelegt.");
+              setSuccess(outcome.message);
+              setSuccessTone(outcome.tone);
+              if (!outcome.simulated) {
+                router.refresh();
+              }
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -829,7 +881,7 @@ export function ProjectAdminForm() {
         Projekt anlegen
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -844,6 +896,7 @@ export function ProjectRowActions({ project }: { project: ProjectAdminRow }) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
 
   return (
     <>
@@ -882,10 +935,14 @@ export function ProjectRowActions({ project }: { project: ProjectAdminRow }) {
                     if (!isPostgresUuidLike(project.id)) {
                       throw new Error("Für dieses Projekt liegt keine gültige Kennung vor.");
                     }
-                    await archiveProject({ projectId: project.id });
-                    setSuccess("Projekt wurde archiviert.");
-                    router.refresh();
-                    setOpen(false);
+                    const result = await archiveProject({ projectId: project.id });
+                    const outcome = resolveActionOutcome(result, "Projekt wurde archiviert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -905,16 +962,20 @@ export function ProjectRowActions({ project }: { project: ProjectAdminRow }) {
                     if (!isPostgresUuidLike(project.id)) {
                       throw new Error("Für dieses Projekt liegt keine gültige Kennung vor.");
                     }
-                    await updateProject({
+                    const result = await updateProject({
                       projectId: project.id,
                       name,
                       code: code || null,
                       description: description || null,
                       isActive,
                     });
-                    setSuccess("Projekt wurde aktualisiert.");
-                    router.refresh();
-                    setOpen(false);
+                    const outcome = resolveActionOutcome(result, "Projekt wurde aktualisiert.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -925,7 +986,7 @@ export function ProjectRowActions({ project }: { project: ProjectAdminRow }) {
             </Button>
           </div>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </Modal>
     </>
@@ -940,6 +1001,7 @@ export function HolidayAdminForm({ holiday }: { holiday?: HolidayGroupRow }) {
   const [isCompanyObserved, setIsCompanyObserved] = useState(holiday?.isCompanyObserved ?? true);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -976,13 +1038,22 @@ export function HolidayAdminForm({ holiday }: { holiday?: HolidayGroupRow }) {
               };
 
               if (holiday) {
-                await updateHoliday({ ...payload, holidayIds: holiday.holidayIds });
-                setSuccess("Feiertag wurde aktualisiert.");
+                const result = await updateHoliday({ ...payload, holidayIds: holiday.holidayIds });
+                const outcome = resolveActionOutcome(result, "Feiertag wurde aktualisiert.");
+                setSuccess(outcome.message);
+                setSuccessTone(outcome.tone);
+                if (!outcome.simulated) {
+                  router.refresh();
+                }
               } else {
-                await createHoliday(payload);
-                setSuccess("Feiertag wurde angelegt.");
+                const result = await createHoliday(payload);
+                const outcome = resolveActionOutcome(result, "Feiertag wurde angelegt.");
+                setSuccess(outcome.message);
+                setSuccessTone(outcome.tone);
+                if (!outcome.simulated) {
+                  router.refresh();
+                }
               }
-              router.refresh();
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -992,7 +1063,7 @@ export function HolidayAdminForm({ holiday }: { holiday?: HolidayGroupRow }) {
         {holiday ? "Feiertag speichern" : "Feiertag anlegen"}
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -1002,6 +1073,7 @@ export function HolidayRowActions({ holiday }: { holiday: HolidayGroupRow }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -1027,10 +1099,14 @@ export function HolidayRowActions({ holiday }: { holiday: HolidayGroupRow }) {
                   try {
                     setMessage(null);
                     setSuccess(null);
-                    await deleteHoliday({ holidayIds: holiday.holidayIds });
-                    setSuccess("Feiertag wurde gelöscht.");
-                    router.refresh();
-                    setOpen(false);
+                    const result = await deleteHoliday({ holidayIds: holiday.holidayIds });
+                    const outcome = resolveActionOutcome(result, "Feiertag wurde gelöscht.");
+                    setSuccess(outcome.message);
+                    setSuccessTone(outcome.tone);
+                    if (!outcome.simulated) {
+                      router.refresh();
+                      setOpen(false);
+                    }
                   } catch (error) {
                     setMessage(toGermanErrorMessage(error));
                   }
@@ -1041,7 +1117,7 @@ export function HolidayRowActions({ holiday }: { holiday: HolidayGroupRow }) {
             </Button>
           </div>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       </Modal>
     </>
@@ -1061,6 +1137,7 @@ export function SettingsAdminForm({ settings }: { settings: SettingsRow }) {
   });
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -1099,7 +1176,7 @@ export function SettingsAdminForm({ settings }: { settings: SettingsRow }) {
             try {
               setMessage(null);
               setSuccess(null);
-              await updateCompanySettings({
+              const result = await updateCompanySettings({
                 companyName: form.companyName,
                 timezone: form.timezone,
                 holidayRegionCode: form.holidayRegionCode,
@@ -1108,8 +1185,12 @@ export function SettingsAdminForm({ settings }: { settings: SettingsRow }) {
                 defaultAnnualLeaveDays: Number(form.defaultAnnualLeaveDays),
                 carryOverEnabled: form.carryOverEnabled,
               });
-              setSuccess("Unternehmenseinstellungen wurden gespeichert.");
-              router.refresh();
+              const outcome = resolveActionOutcome(result, "Unternehmenseinstellungen wurden gespeichert.");
+              setSuccess(outcome.message);
+              setSuccessTone(outcome.tone);
+              if (!outcome.simulated) {
+                router.refresh();
+              }
             } catch (error) {
               setMessage(toGermanErrorMessage(error));
             }
@@ -1119,7 +1200,7 @@ export function SettingsAdminForm({ settings }: { settings: SettingsRow }) {
         Einstellungen speichern
       </Button>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }
@@ -1141,6 +1222,7 @@ export function ExportTriggerForm({
   });
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [isPending, startTransition] = useTransition();
 
   async function runExport(
@@ -1162,18 +1244,14 @@ export function ExportTriggerForm({
         teamId: form.teamId || null,
       };
       if (runtime.isDemo) {
+        setSuccessTone("warning");
         setSuccess(
           getActionMessage(
             {
               simulated: true,
-              message:
-                type === "monthly_timesheet"
-                  ? "Demo-Modus: Monatsexport wurde simuliert vorbereitet."
-                  : type === "absence_report"
-                    ? "Demo-Modus: Abwesenheitsreport wurde simuliert vorbereitet."
-                    : type === "project_time_report"
-                      ? "Demo-Modus: Projektreport wurde simuliert vorbereitet."
-                    : "Demo-Modus: Teamübersicht wurde simuliert vorbereitet.",
+              message: DEMO_EXPORT_MESSAGE,
+              tone: "warning" as const,
+              kind: "demo_readonly",
             },
             "PDF-Export wurde gestartet."
           )
@@ -1189,6 +1267,7 @@ export function ExportTriggerForm({
       }
 
       window.open(`/api/exports/pdf?${query.toString()}`, "_blank", "noopener,noreferrer");
+      setSuccessTone("success");
       setSuccess("PDF-Export wurde gestartet.");
       window.setTimeout(() => router.refresh(), 800);
     } catch (error) {
@@ -1238,7 +1317,7 @@ export function ExportTriggerForm({
         </Button>
       </div>
       <FormMessage message={message} />
-      <FormMessage message={success} tone="success" />
+      <FormMessage message={success} tone={successTone} />
     </Panel>
   );
 }

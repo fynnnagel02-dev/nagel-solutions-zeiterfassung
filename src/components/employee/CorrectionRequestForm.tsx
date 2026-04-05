@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { withdrawTimeEntryChangeRequest, createTimeEntryChangeRequest } from "@/app/actions/approvals";
 import { Button } from "@/src/components/shared/Button";
 import { FormMessage } from "@/src/components/shared/FormMessage";
-import { getActionMessage, isDemoActionResult } from "@/src/lib/demo/client";
+import { getActionMessage, getActionSuccessTone, getActionTone, isDemoActionResult } from "@/src/lib/demo/client";
 import { toGermanErrorMessage } from "@/src/lib/forms/errors";
 
 export function CorrectionRequestForm({
@@ -23,6 +23,7 @@ export function CorrectionRequestForm({
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successTone, setSuccessTone] = useState<"success" | "warning">("success");
   const [reason, setReason] = useState("");
   const [startedAt, setStartedAt] = useState("");
   const [endedAt, setEndedAt] = useState("");
@@ -107,8 +108,9 @@ export function CorrectionRequestForm({
                     proposedComment: comment || null,
                   });
                   setSuccess(getActionMessage(result, "Korrektur wurde eingereicht."));
-                  setOpen(false);
+                  setSuccessTone(getActionSuccessTone(result));
                   if (!isDemoActionResult(result)) {
+                    setOpen(false);
                     router.refresh();
                   }
                 } catch (error) {
@@ -120,7 +122,7 @@ export function CorrectionRequestForm({
             {isPending ? "Wird gesendet..." : "Korrektur absenden"}
           </Button>
           <FormMessage message={message} />
-          <FormMessage message={success} tone="success" />
+          <FormMessage message={success} tone={successTone} />
         </div>
       ) : null}
     </div>
@@ -131,7 +133,7 @@ export function WithdrawCorrectionButton({ requestId }: { requestId: string }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-  const [tone, setTone] = useState<"error" | "success">("success");
+  const [tone, setTone] = useState<"error" | "success" | "warning">("success");
 
   return (
     <div className="space-y-2">
@@ -143,7 +145,7 @@ export function WithdrawCorrectionButton({ requestId }: { requestId: string }) {
           startTransition(async () => {
             try {
               const result = await withdrawTimeEntryChangeRequest(requestId);
-              setTone("success");
+              setTone(getActionTone(result, "success"));
               setMessage(getActionMessage(result, "Korrekturanfrage wurde zurückgezogen."));
               if (!isDemoActionResult(result)) {
                 router.refresh();
