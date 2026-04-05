@@ -5,7 +5,9 @@ import { buildAppHref, getDefaultPathForRole } from "@/src/lib/demo/paths";
 import type { AppRuntimeState } from "@/src/lib/demo/runtime";
 import { getAppRuntimeState } from "@/src/lib/demo/runtime";
 
-export async function AppRootScreen(runtimeOverride?: AppRuntimeState) {
+export async function AppRootScreen(
+  runtimeOverride?: AppRuntimeState
+): Promise<never> {
   const runtime = runtimeOverride ?? (await getAppRuntimeState());
 
   if (runtime.isDemo) {

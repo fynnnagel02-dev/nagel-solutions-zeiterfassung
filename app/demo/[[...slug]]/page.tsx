@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { AppShell } from "@/src/components/app/AppShell";
 import { getAppShellData } from "@/src/lib/app-shell-data";
@@ -42,7 +43,7 @@ function paramsToRecord(searchParams: Record<string, string | string[] | undefin
 async function renderDemoScreen(
   key: string,
   normalizedSearchParams: Promise<Record<string, string>>
-) {
+): Promise<ReactNode> {
   switch (key) {
     case "":
       return <>{await AppRootScreen()}</>;
@@ -83,7 +84,7 @@ async function renderDemoScreen(
     case "verwaltung/steuerung/kalender":
       return <>{await AdminCalendarScreen({ searchParams: normalizedSearchParams })}</>;
     default:
-      notFound();
+      return notFound();
   }
 }
 
@@ -93,7 +94,7 @@ export default async function DemoCatchAllPage({
 }: {
   params: Promise<{ slug?: string[] }>;
   searchParams: DemoSearchParams;
-}) {
+}): Promise<ReactNode> {
   const [{ slug = [] }, resolvedSearchParams] = await Promise.all([params, searchParams]);
   const normalizedParams = paramsToRecord(resolvedSearchParams);
   const normalizedSearchParams = Promise.resolve(normalizedParams);
